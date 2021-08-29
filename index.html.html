@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="include.js"></script>
+        <script>
+            var ytdl = require("ytdl-core");
+            var streamSaver = require("streamsaver");
+
+            function download(){
+                ytdl("http://www.youtube.com/watch?v=aqz-KE-bpKQ"/*document.getElementById("link")*/).pipe(streamSaver.createWriteStream("test.mp4"));
+            }
+        </script>
+    </head>
+    <body>
+        <label for="link">Link:</label>
+        <input type="text" id="link" name="link">
+        <button onclick="download()">Download</button>
+    </body>
+</html>
