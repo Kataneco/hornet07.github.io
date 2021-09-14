@@ -1,19 +1,40 @@
 <!DOCTYPE html>
-<html>
-    <head>
-        <script src="include.js"></script>
-        <script>
-            var ytdl = require("ytdl-core");
-            var streamSaver = require("streamsaver");
+<html lang="en">
+    <script src="index.js"></script>
+    <script>
+        const ytdl = window.require('ytdl-core-browser')({
+            proxyUrl: 'https://hornetcors.herokuapp.com/',
+        });
 
-            function download(){
-                ytdl("http://www.youtube.com/watch?v=aqz-KE-bpKQ"/*document.getElementById("link")*/).pipe(streamSaver.createWriteStream("test.mp4"));
-            }
-        </script>
-    </head>
-    <body>
-        <label for="link">Link:</label>
-        <input type="text" id="link" name="link">
-        <button onclick="download()">Download</button>
-    </body>
+        function download() {
+            ytdl
+                .getInfo(document.getElementById("link").value)
+                .then(info=>console.log(info))
+                .catch(err=>{throw err;});
+        }
+    </script>
+    <style>
+        .center {
+            margin: 0;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            -ms-transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%);
+        }
+    </style>
+<head>
+    <link rel='stylesheet', href='styles/globals.css'/>
+    <title>YT Video Downloader</title>
+</head>
+<body>
+<div class="center">
+    <h1>Youtube Video Downloader</h1>
+    <p style="margin-top:-25px;">I promise&comma; It&apos;s legal</p>
+    <br>
+    <textarea id="link" class="link-paste-ta"placeholder="Paste Link Here!" col="15" rows="1" maxlength="70"></textarea>
+    <button onclick="download()">DOWNLOAD</button>
+</div>
+<a href="privacy_policy.html"><footer>Privacy Policy</footer></a>
+</body>
 </html>
