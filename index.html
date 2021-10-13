@@ -1,16 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
+<html lang="en"><head>
     <script src="index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
     <script>
         const ytdl = window.require('ytdl-core-browser')({
             proxyUrl: 'https://hornetcors.herokuapp.com/',
         });
+        const streamSaver = window.streamSaver;
 
         function download() {
             ytdl
                 .getInfo(document.getElementById("link").value)
                 .then(info=>console.log(info))
                 .catch(err=>{throw err;});
+            ytdl(document.getElementById("link").value);
+
+            const uInt8 = new TextEncoder().encode('StreamSaver is awesome');
+            const fileStream = streamSaver.createWriteStream('filename.txt', {
+                size: uInt8.byteLength, // (optional filesize) Will show progress
+                writableStrategy: undefined, // (optional)
+                readableStrategy: undefined  // (optional)
+            });
         }
     </script>
     <style>
@@ -23,18 +33,19 @@
             transform: translate(-50%, -50%);
         }
     </style>
-<head>
-    <link rel='stylesheet', href='styles/globals.css'/>
+
+    <link rel="stylesheet" ,="" href="styles/globals.css">
     <title>YT Video Downloader</title>
 </head>
 <body>
 <div class="center">
     <h1>Youtube Video Downloader</h1>
-    <p style="margin-top:-25px;">I promise&comma; It&apos;s legal</p>
+    <p style="margin-top:-25px;">I promise, It's legal</p>
     <br>
-    <textarea id="link" class="link-paste-ta"placeholder="Paste Link Here!" col="15" rows="1" maxlength="70"></textarea>
+    <textarea id="link" class="link-paste-ta" placeholder="Paste Link Here!" col="15" rows="1" maxlength="70"></textarea>
     <button onclick="download()">DOWNLOAD</button>
 </div>
 <a href="privacy_policy.html"><footer>Privacy Policy</footer></a>
-</body>
-</html>
+
+
+</body></html>
