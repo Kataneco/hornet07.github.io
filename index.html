@@ -15,7 +15,7 @@
                 //writableStrategy: undefined, // (optional)
                 //readableStrategy: undefined  // (optional)
             });
-            ytdl(document.getElementById("link").value).pipeTo(fileStream);
+            ytdl(document.getElementById("link").value).pipe(fileStream);
         }
     </script>
     <style>
