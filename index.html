@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
+    <script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.0.2/dist/ponyfill.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
     <script src="index.js"></script>
     <script>
+        const streamSaver = window.streamSaver;
         const ytdl = window.require('ytdl-core-browser')({
             proxyUrl: 'https://hornetcors.herokuapp.com/',
         });
 
         function download() {
-            ytdl
-                .getInfo(document.getElementById("link").value)
-                .then(info=>console.log(info))
-                .catch(err=>{throw err;});
+              const fileStream = streamSaver.createWriteStream('videox.mp4', {
+                //size: uInt8.byteLength, // (optional filesize) Will show progress
+                //writableStrategy: undefined, // (optional)
+                //readableStrategy: undefined  // (optional)
+            });
+            ytdl(document.getElementById("link").value).pipeTo(fileStream);
         }
     </script>
     <style>
