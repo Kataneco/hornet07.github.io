@@ -2619,7 +2619,7 @@ function isFunction (value) {
   return typeof value === 'function'
 }
 
-},{"is-object":10,"merge-descriptors":17}],7:[function(require,module,exports){
+},{"is-object":10,"merge-descriptors":16}],7:[function(require,module,exports){
 var http = require('http')
 var url = require('url')
 
@@ -2652,7 +2652,7 @@ function validateParams (params) {
   return params
 }
 
-},{"http":43,"url":64}],8:[function(require,module,exports){
+},{"http":42,"url":63}],8:[function(require,module,exports){
 /*! ieee754. BSD-3-Clause License. Feross Aboukhadijeh <https://feross.org/opensource> */
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
@@ -2809,9 +2809,9 @@ class DashMPDParser extends stream_1.Writable {
                 Number: seq,
                 Time: currtime,
             };
-            return str.replace(/\$(\w+)\$/g, (m, p1) => context[p1] + '');
+            return str.replace(/\$(\w+)\$/g, (m, p1) => `${context[p1]}`);
         };
-        this._parser.on('opentag', (node) => {
+        this._parser.on('opentag', node => {
             switch (node.name) {
                 case 'mpd':
                     currtime =
@@ -2854,10 +2854,10 @@ class DashMPDParser extends stream_1.Writable {
                 case 'adaptationset':
                 case 'representation':
                     treeLevel++;
-                    if (targetID == null) {
+                    if (!targetID) {
                         targetID = node.attributes.id;
                     }
-                    getSegments = node.attributes.id === targetID + '';
+                    getSegments = node.attributes.id === `${targetID}`;
                     if (getSegments) {
                         if (periodStart) {
                             currtime += periodStart;
@@ -2882,7 +2882,7 @@ class DashMPDParser extends stream_1.Writable {
                     if (getSegments) {
                         gotSegments = true;
                         let tl = timeline.shift();
-                        let segmentDuration = (tl && tl.duration || duration) / timescale * 1000;
+                        let segmentDuration = ((tl === null || tl === void 0 ? void 0 : tl.duration) || duration) / timescale * 1000;
                         this.emit('item', {
                             url: baseURL.filter(s => !!s).join('') + node.attributes.media,
                             seq: seq++,
@@ -2904,7 +2904,7 @@ class DashMPDParser extends stream_1.Writable {
                 this.emit('end');
             }
         };
-        this._parser.on('closetag', (tagName) => {
+        this._parser.on('closetag', tagName => {
             switch (tagName) {
                 case 'adaptationset':
                 case 'representation':
@@ -2920,8 +2920,8 @@ class DashMPDParser extends stream_1.Writable {
                                 duration: 0,
                             });
                         }
-                        for (let { duration, repeat, time } of timeline) {
-                            duration = duration / timescale * 1000;
+                        for (let { duration: itemDuration, repeat, time } of timeline) {
+                            itemDuration = itemDuration / timescale * 1000;
                             repeat = repeat || 1;
                             currtime = time || currtime;
                             for (let i = 0; i < repeat; i++) {
@@ -2929,9 +2929,9 @@ class DashMPDParser extends stream_1.Writable {
                                     url: baseURL.filter(s => !!s).join('') +
                                         tmpl(segmentTemplate.media),
                                     seq: seq++,
-                                    duration,
+                                    duration: itemDuration,
                                 });
-                                currtime += duration;
+                                currtime += itemDuration;
                             }
                         }
                     }
@@ -2944,7 +2944,7 @@ class DashMPDParser extends stream_1.Writable {
                     break;
             }
         });
-        this._parser.on('text', (text) => {
+        this._parser.on('text', text => {
             if (lastTag === 'baseurl') {
                 baseURL[treeLevel] = text;
                 lastTag = null;
@@ -2959,26 +2959,26 @@ class DashMPDParser extends stream_1.Writable {
 }
 exports.default = DashMPDParser;
 
-},{"./parse-time":14,"sax":27,"stream":28}],12:[function(require,module,exports){
+},{"./parse-time":14,"sax":26,"stream":27}],12:[function(require,module,exports){
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 const stream_1 = require("stream");
-const url_1 = require("url");
 const miniget_1 = __importDefault(require("miniget"));
 const m3u8_parser_1 = __importDefault(require("./m3u8-parser"));
 const dash_mpd_parser_1 = __importDefault(require("./dash-mpd-parser"));
-const queue_1 = __importDefault(require("./queue"));
+const queue_1 = require("./queue");
 const parse_time_1 = require("./parse-time");
 const supportedParsers = {
-    'm3u8': m3u8_parser_1.default,
+    m3u8: m3u8_parser_1.default,
     'dash-mpd': dash_mpd_parser_1.default,
 };
-let m3u8stream = (playlistURL, options = {}) => {
+let m3u8stream = ((playlistURL, options = {}) => {
     const stream = new stream_1.PassThrough();
     const chunkReadahead = options.chunkReadahead || 3;
-    const liveBuffer = options.liveBuffer || 20000; // 20 seconds
+    // 20 seconds.
+    const liveBuffer = options.liveBuffer || 20000;
     const requestOptions = options.requestOptions;
     const Parser = supportedParsers[options.parser || (/\.mpd$/.test(playlistURL) ? 'dash-mpd' : 'm3u8')];
     if (!Parser) {
@@ -2990,28 +2990,34 @@ let m3u8stream = (playlistURL, options = {}) => {
             parse_time_1.humanStr(options.begin) :
             Math.max(options.begin - liveBuffer, 0);
     }
+    const forwardEvents = (req) => {
+        for (let event of ['abort', 'request', 'response', 'redirect', 'retry', 'reconnect']) {
+            req.on(event, stream.emit.bind(stream, event));
+        }
+    };
     let currSegment;
-    const streamQueue = new queue_1.default((req, callback) => {
+    const streamQueue = new queue_1.Queue((req, callback) => {
         currSegment = req;
         // Count the size manually, since the `content-length` header is not
         // always there.
         let size = 0;
         req.on('data', (chunk) => size += chunk.length);
         req.pipe(stream, { end: false });
-        req.on('end', () => callback(undefined, size));
+        req.on('end', () => callback(null, size));
     }, { concurrency: 1 });
     let segmentNumber = 0;
     let downloaded = 0;
-    const requestQueue = new queue_1.default((segment, callback) => {
-        let options = Object.assign({}, requestOptions);
+    const requestQueue = new queue_1.Queue((segment, callback) => {
+        let reqOptions = Object.assign({}, requestOptions);
         if (segment.range) {
-            options.headers = Object.assign({}, options.headers, {
+            reqOptions.headers = Object.assign({}, reqOptions.headers, {
                 Range: `bytes=${segment.range.start}-${segment.range.end}`,
             });
         }
-        let req = miniget_1.default(url_1.resolve(playlistURL, segment.url), options);
+        let req = miniget_1.default(new URL(segment.url, playlistURL).toString(), reqOptions);
         req.on('error', callback);
-        streamQueue.push(req, (err, size) => {
+        forwardEvents(req);
+        streamQueue.push(req, (_, size) => {
             downloaded += +size;
             stream.emit('progress', {
                 num: ++segmentNumber,
@@ -3019,7 +3025,7 @@ let m3u8stream = (playlistURL, options = {}) => {
                 duration: segment.duration,
                 url: segment.url,
             }, requestQueue.total, downloaded);
-            callback();
+            callback(null);
         });
     }, { concurrency: chunkReadahead });
     const onError = (err) => {
@@ -3061,6 +3067,7 @@ let m3u8stream = (playlistURL, options = {}) => {
         lastRefresh = Date.now();
         currPlaylist = miniget_1.default(playlistURL, requestOptions);
         currPlaylist.on('error', onError);
+        forwardEvents(currPlaylist);
         const parser = currPlaylist.pipe(new Parser(options.id));
         parser.on('starttime', (a) => {
             if (starttime) {
@@ -3097,7 +3104,8 @@ let m3u8stream = (playlistURL, options = {}) => {
                 // Only keep the last `liveBuffer` of items.
                 while (tailedItems.length > 1 &&
                     tailedItemsDuration - tailedItems[0].duration > liveBuffer) {
-                    tailedItemsDuration -= tailedItems.shift().duration;
+                    const lastItem = tailedItems.shift();
+                    tailedItemsDuration -= lastItem.duration;
                 }
             }
             starttime += timedItem.duration;
@@ -3107,16 +3115,16 @@ let m3u8stream = (playlistURL, options = {}) => {
             // If we are too ahead of the stream, make sure to get the
             // latest available items with a small buffer.
             if (!addedItems.length && tailedItems.length) {
-                tailedItems.forEach((item) => { addItem(item); });
+                tailedItems.forEach(item => { addItem(item); });
             }
             // Refresh the playlist when remaining segments get low.
             refreshThreshold = Math.max(1, Math.ceil(addedItems.length * 0.01));
             // Throttle refreshing the playlist by looking at the duration
             // of live items added on this refresh.
             minRefreshTime =
-                addedItems.reduce(((total, item) => item.duration + total), 0);
+                addedItems.reduce((total, item) => item.duration + total, 0);
             fetchingPlaylist = false;
-            onQueuedEnd();
+            onQueuedEnd(null);
         });
     };
     refreshPlaylist();
@@ -3125,21 +3133,16 @@ let m3u8stream = (playlistURL, options = {}) => {
         streamQueue.die();
         requestQueue.die();
         clearTimeout(refreshTimeout);
-        if (currPlaylist) {
-            currPlaylist.unpipe();
-            currPlaylist.abort();
-        }
-        if (currSegment) {
-            currSegment.unpipe();
-            currSegment.abort();
-        }
+        currPlaylist === null || currPlaylist === void 0 ? void 0 : currPlaylist.destroy();
+        currSegment === null || currSegment === void 0 ? void 0 : currSegment.destroy();
         stream_1.PassThrough.prototype.end.call(stream, null);
     };
     return stream;
-};
+});
+m3u8stream.parseTimestamp = parse_time_1.humanStr;
 module.exports = m3u8stream;
 
-},{"./dash-mpd-parser":11,"./m3u8-parser":13,"./parse-time":14,"./queue":15,"miniget":16,"stream":28,"url":64}],13:[function(require,module,exports){
+},{"./dash-mpd-parser":11,"./m3u8-parser":13,"./parse-time":14,"./queue":15,"miniget":17,"stream":27}],13:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const stream_1 = require("stream");
@@ -3163,7 +3166,7 @@ class m3u8Parser extends stream_1.Writable {
         let attrs = {};
         let regex = /([A-Z0-9-]+)=(?:"([^"]*?)"|([^,]*?))/g;
         let match;
-        while ((match = regex.exec(value)) != null) {
+        while ((match = regex.exec(value)) !== null) {
             attrs[match[1]] = match[2] || match[3];
         }
         return attrs;
@@ -3251,14 +3254,10 @@ class m3u8Parser extends stream_1.Writable {
 }
 exports.default = m3u8Parser;
 
-},{"stream":28}],14:[function(require,module,exports){
+},{"stream":27}],14:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-/**
- * Converts human friendly time to milliseconds. Supports the format
- * 00:00:00.000 for hours, minutes, seconds, and milliseconds respectively.
- * And 0ms, 0s, 0m, 0h, and together 1m1s.
- */
+exports.durationStr = exports.humanStr = void 0;
 const numberFormat = /^\d+$/;
 const timeFormat = /^(?:(?:(\d+):)?(\d{1,2}):)?(\d{1,2})(?:\.(\d{3}))?$/;
 const timeUnits = {
@@ -3267,6 +3266,14 @@ const timeUnits = {
     m: 60000,
     h: 3600000,
 };
+/**
+ * Converts human friendly time to milliseconds. Supports the format
+ * 00:00:00.000 for hours, minutes, seconds, and milliseconds respectively.
+ * And 0ms, 0s, 0m, 0h, and together 1m1s.
+ *
+ * @param {number|string} time
+ * @returns {number}
+ */
 exports.humanStr = (time) => {
     if (typeof time === 'number') {
         return time;
@@ -3276,16 +3283,16 @@ exports.humanStr = (time) => {
     }
     const firstFormat = timeFormat.exec(time);
     if (firstFormat) {
-        return +(firstFormat[1] || 0) * timeUnits.h +
-            +(firstFormat[2] || 0) * timeUnits.m +
-            +firstFormat[3] * timeUnits.s +
+        return (+(firstFormat[1] || 0) * timeUnits.h) +
+            (+(firstFormat[2] || 0) * timeUnits.m) +
+            (+firstFormat[3] * timeUnits.s) +
             +(firstFormat[4] || 0);
     }
     else {
         let total = 0;
         const r = /(-?\d+)(ms|s|m|h)/g;
         let rs;
-        while ((rs = r.exec(time)) != null) {
+        while ((rs = r.exec(time)) !== null) {
             total += +rs[1] * timeUnits[rs[2]];
         }
         return total;
@@ -3293,12 +3300,15 @@ exports.humanStr = (time) => {
 };
 /**
  * Parses a duration string in the form of "123.456S", returns milliseconds.
+ *
+ * @param {string} time
+ * @returns {number}
  */
 exports.durationStr = (time) => {
     let total = 0;
     const r = /(\d+(?:\.\d+)?)(S|M|H)/g;
     let rs;
-    while ((rs = r.exec(time)) != null) {
+    while ((rs = r.exec(time)) !== null) {
         total += +rs[1] * timeUnits[rs[2].toLowerCase()];
     }
     return total;
@@ -3307,9 +3317,14 @@ exports.durationStr = (time) => {
 },{}],15:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.Queue = void 0;
 class Queue {
     /**
      * A really simple queue with concurrency.
+     *
+     * @param {Function} worker
+     * @param {Object} options
+     * @param {!number} options.concurrency
      */
     constructor(worker, options = {}) {
         this._worker = worker;
@@ -3320,6 +3335,9 @@ class Queue {
     }
     /**
      * Push a task to the queue.
+     *
+     *  @param {T} item
+     *  @param {!Function} callback
      */
     push(item, callback) {
         this.tasks.push({ item, callback });
@@ -3342,9 +3360,7 @@ class Queue {
             }
             this.active--;
             callbackCalled = true;
-            if (callback) {
-                callback(err, result);
-            }
+            callback === null || callback === void 0 ? void 0 : callback(err, result);
             this._next();
         });
     }
@@ -3355,246 +3371,9 @@ class Queue {
         this.tasks = [];
     }
 }
-exports.default = Queue;
+exports.Queue = Queue;
 
 },{}],16:[function(require,module,exports){
-(function (process){(function (){
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-const http_1 = __importDefault(require("http"));
-const https_1 = __importDefault(require("https"));
-const url_1 = require("url");
-const stream_1 = require("stream");
-const httpLibs = { 'http:': http_1.default, 'https:': https_1.default };
-const redirectCodes = { 301: true, 302: true, 303: true, 307: true };
-const retryCodes = { 429: true, 503: true };
-const defaults = {
-    maxRedirects: 2,
-    maxRetries: 2,
-    maxReconnects: 0,
-    backoff: { inc: 100, max: 10000 },
-};
-function Miniget(url, options, callback) {
-    if (typeof options === 'function') {
-        callback = options;
-        options = {};
-    }
-    else if (!options) {
-        options = {};
-    }
-    const opts = Object.assign({}, defaults, options);
-    const stream = new stream_1.PassThrough({ highWaterMark: opts.highWaterMark });
-    let myreq, mydecoded;
-    let aborted = false;
-    let redirects = 0;
-    let retries = 0;
-    let retryTimeout;
-    let reconnects = 0;
-    let contentLength;
-    let acceptRanges = false;
-    let rangeStart = 0, rangeEnd;
-    let downloaded = 0;
-    // Check if this is a ranged request.
-    if (opts.headers && opts.headers.Range) {
-        let r = /bytes=(\d+)-(\d+)?/.exec(opts.headers.Range + '');
-        if (r) {
-            rangeStart = parseInt(r[1], 10);
-            rangeEnd = parseInt(r[2], 10);
-        }
-    }
-    // Add `Accept-Encoding` header.
-    if (opts.acceptEncoding) {
-        opts.headers = Object.assign({
-            'Accept-Encoding': Object.keys(opts.acceptEncoding).join(', ')
-        }, opts.headers);
-    }
-    const doRetry = (retryOptions = {}) => {
-        if (aborted) {
-            return false;
-        }
-        // If there is an error when the download has already started,
-        // but not finished, try reconnecting.
-        if (mydecoded && 0 < downloaded) {
-            if (acceptRanges && downloaded < contentLength &&
-                reconnects++ < opts.maxReconnects) {
-                mydecoded = null;
-                retries = 0;
-                let inc = opts.backoff.inc;
-                let ms = Math.min(inc, opts.backoff.max);
-                retryTimeout = setTimeout(doDownload, ms);
-                stream.emit('reconnect', reconnects, retryOptions.err);
-                return true;
-            }
-        }
-        else if ((!retryOptions.statusCode ||
-            retryOptions.err && retryOptions.err.message === 'ENOTFOUND') &&
-            retries++ < opts.maxRetries) {
-            let ms = retryOptions.retryAfter ||
-                Math.min(retries * opts.backoff.inc, opts.backoff.max);
-            retryTimeout = setTimeout(doDownload, ms);
-            stream.emit('retry', retries, retryOptions.err);
-            return true;
-        }
-        return false;
-    };
-    const onRequestError = (err, statusCode) => {
-        if (!doRetry({ err, statusCode })) {
-            stream.emit('error', err);
-        }
-    };
-    const doDownload = () => {
-        if (aborted) {
-            return;
-        }
-        let parsed, httpLib;
-        try {
-            parsed = url_1.parse(url);
-            httpLib = httpLibs[parsed.protocol];
-        }
-        catch (err) {
-            // Let the error be caught by the if statement below.
-        }
-        if (!httpLib) {
-            stream.emit('error', Error('Invalid URL: ' + url));
-            return;
-        }
-        Object.assign(parsed, opts);
-        if (acceptRanges && downloaded > 0) {
-            let start = downloaded + rangeStart;
-            let end = rangeEnd || '';
-            parsed.headers = Object.assign({}, parsed.headers, {
-                Range: `bytes=${start}-${end}`
-            });
-        }
-        if (opts.transform) {
-            try {
-                parsed = opts.transform(parsed);
-            }
-            catch (err) {
-                stream.emit('error', err);
-                return;
-            }
-            if (!parsed || parsed.protocol) {
-                httpLib = httpLibs[parsed === null || parsed === void 0 ? void 0 : parsed.protocol];
-                if (!httpLib) {
-                    stream.emit('error', Error('Invalid URL object from `transform` function'));
-                    return;
-                }
-            }
-        }
-        myreq = httpLib.get(parsed, (res) => {
-            if (res.statusCode in redirectCodes) {
-                if (redirects++ >= opts.maxRedirects) {
-                    stream.emit('error', Error('Too many redirects'));
-                }
-                else {
-                    url = res.headers.location;
-                    setTimeout(doDownload, res.headers['retry-after'] ? parseInt(res.headers['retry-after'], 10) * 1000 : 0);
-                    stream.emit('redirect', url);
-                }
-                return;
-                // Check for rate limiting.
-            }
-            else if (res.statusCode in retryCodes) {
-                if (!doRetry({ retryAfter: parseInt(res.headers['retry-after'], 10) })) {
-                    let err = Error('Status code: ' + res.statusCode);
-                    stream.emit('error', err);
-                }
-                return;
-            }
-            else if (res.statusCode < 200 || 400 <= res.statusCode) {
-                let err = Error('Status code: ' + res.statusCode);
-                if (res.statusCode >= 500) {
-                    onRequestError(err, res.statusCode);
-                }
-                else {
-                    stream.emit('error', err);
-                }
-                return;
-            }
-            let decoded = res;
-            const cleanup = () => {
-                res.removeListener('data', ondata);
-                decoded.removeListener('end', onend);
-                decoded.removeListener('error', onerror);
-                res.removeListener('error', onerror);
-            };
-            const ondata = (chunk) => { downloaded += chunk.length; };
-            const onend = () => {
-                cleanup();
-                if (!doRetry()) {
-                    stream.end();
-                }
-            };
-            const onerror = (err) => {
-                cleanup();
-                onRequestError(err);
-            };
-            if (opts.acceptEncoding && res.headers['content-encoding']) {
-                for (let enc of res.headers['content-encoding'].split(', ').reverse()) {
-                    let fn = opts.acceptEncoding[enc];
-                    if (fn != null) {
-                        decoded = decoded.pipe(fn());
-                        decoded.on('error', onerror);
-                    }
-                }
-            }
-            if (!contentLength) {
-                contentLength = parseInt(res.headers['content-length'] + '', 10);
-                acceptRanges = res.headers['accept-ranges'] === 'bytes' &&
-                    contentLength > 0 && opts.maxReconnects > 0;
-            }
-            res.on('data', ondata);
-            decoded.on('end', onend);
-            decoded.pipe(stream, { end: !acceptRanges });
-            mydecoded = decoded;
-            stream.emit('response', res);
-            res.on('error', onerror);
-        });
-        myreq.on('error', onRequestError);
-        stream.emit('request', myreq);
-    };
-    stream.abort = () => {
-        aborted = true;
-        stream.emit('abort');
-        if (myreq) {
-            myreq.abort();
-        }
-        if (mydecoded) {
-            mydecoded.unpipe(stream);
-        }
-        clearTimeout(retryTimeout);
-    };
-    process.nextTick(doDownload);
-    if (callback) {
-        let body = '', myres;
-        stream.setEncoding('utf8');
-        stream.on('data', (chunk) => body += chunk);
-        stream.on('response', (res) => myres = res);
-        stream.on('end', () => callback(null, myres, body));
-        stream.on('error', callback);
-    }
-    return callback ? null : stream;
-}
-// istanbul ignore next
-// https://github.com/istanbuljs/nyc/issues/1209
-(function (Miniget) {
-    Miniget.promise = (url, options) => {
-        return new Promise((resolve, reject) => {
-            Miniget(url, options, (err, res, body) => {
-                if (err)
-                    return reject(err);
-                resolve([res, body]);
-            });
-        });
-    };
-})(Miniget || (Miniget = {}));
-module.exports = Miniget;
-
-}).call(this)}).call(this,require('_process'))
-},{"_process":20,"http":43,"https":7,"stream":28,"url":64}],17:[function(require,module,exports){
 /*!
  * merge-descriptors
  * Copyright(c) 2014 Jonathan Ong
@@ -3656,37 +3435,28 @@ function merge(dest, src, redefine) {
   return dest
 }
 
-},{}],18:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 (function (process){(function (){
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 const http_1 = __importDefault(require("http"));
 const https_1 = __importDefault(require("https"));
-const url_1 = require("url");
 const stream_1 = require("stream");
 const httpLibs = { 'http:': http_1.default, 'https:': https_1.default };
 const redirectStatusCodes = new Set([301, 302, 303, 307, 308]);
 const retryStatusCodes = new Set([429, 503]);
-// `request`, `response`, `abort` left out, miniget will emit these.
+// `request`, `response`, `abort`, left out, miniget will emit these.
 const requestEvents = ['connect', 'continue', 'information', 'socket', 'timeout', 'upgrade'];
-const responseEvents = ['aborted', 'close'];
+const responseEvents = ['aborted'];
 Miniget.MinigetError = class MinigetError extends Error {
-    constructor(message) {
+    constructor(message, statusCode) {
         super(message);
+        this.statusCode = statusCode;
     }
 };
-Miniget.Defaults = Miniget.Options = {
+Miniget.defaultOptions = {
     maxRedirects: 10,
     maxRetries: 2,
     maxReconnects: 0,
@@ -3694,11 +3464,12 @@ Miniget.Defaults = Miniget.Options = {
 };
 function Miniget(url, options = {}) {
     var _a;
-    const opts = Object.assign({}, Miniget.Defaults, options);
+    const opts = Object.assign({}, Miniget.defaultOptions, options);
     const stream = new stream_1.PassThrough({ highWaterMark: opts.highWaterMark });
+    stream.destroyed = stream.aborted = false;
     let activeRequest;
+    let activeResponse;
     let activeDecodedStream;
-    let aborted = false;
     let redirects = 0;
     let retries = 0;
     let retryTimeout;
@@ -3709,7 +3480,7 @@ function Miniget(url, options = {}) {
     let downloaded = 0;
     // Check if this is a ranged request.
     if ((_a = opts.headers) === null || _a === void 0 ? void 0 : _a.Range) {
-        let r = /bytes=(\d+)-(\d+)?/.exec(opts.headers.Range + '');
+        let r = /bytes=(\d+)-(\d+)?/.exec(`${opts.headers.Range}`);
         if (r) {
             rangeStart = parseInt(r[1], 10);
             rangeEnd = parseInt(r[2], 10);
@@ -3718,11 +3489,11 @@ function Miniget(url, options = {}) {
     // Add `Accept-Encoding` header.
     if (opts.acceptEncoding) {
         opts.headers = Object.assign({
-            'Accept-Encoding': Object.keys(opts.acceptEncoding).join(', ')
+            'Accept-Encoding': Object.keys(opts.acceptEncoding).join(', '),
         }, opts.headers);
     }
-    const downloadHasStarted = () => activeDecodedStream && 0 < downloaded;
-    const downloadEnded = () => !acceptRanges || downloaded == contentLength;
+    const downloadHasStarted = () => activeDecodedStream && downloaded > 0;
+    const downloadComplete = () => !acceptRanges || downloaded === contentLength;
     const reconnect = (err) => {
         activeDecodedStream = null;
         retries = 0;
@@ -3732,20 +3503,20 @@ function Miniget(url, options = {}) {
         stream.emit('reconnect', reconnects, err);
     };
     const reconnectIfEndedEarly = (err) => {
-        if (options.method != 'HEAD' && !downloadEnded() && reconnects++ < opts.maxReconnects) {
+        if (options.method !== 'HEAD' && !downloadComplete() && reconnects++ < opts.maxReconnects) {
             reconnect(err);
             return true;
         }
         return false;
     };
     const retryRequest = (retryOptions) => {
-        if (aborted) {
+        if (stream.destroyed) {
             return false;
         }
         if (downloadHasStarted()) {
             return reconnectIfEndedEarly(retryOptions.err);
         }
-        else if ((!retryOptions.statusCode || retryOptions.err.message === 'ENOTFOUND') &&
+        else if ((!retryOptions.err || retryOptions.err.message === 'ENOTFOUND') &&
             retries++ < opts.maxRetries) {
             let ms = retryOptions.retryAfter ||
                 Math.min(retries * opts.backoff.inc, opts.backoff.max);
@@ -3755,30 +3526,32 @@ function Miniget(url, options = {}) {
         }
         return false;
     };
-    const onRequestError = (err, statusCode) => {
-        if (!retryRequest({ err, statusCode })) {
-            stream.emit('error', err);
-        }
-    };
     const forwardEvents = (ee, events) => {
         for (let event of events) {
             ee.on(event, stream.emit.bind(stream, event));
         }
     };
     const doDownload = () => {
-        if (aborted) {
-            return;
-        }
-        let parsed, httpLib;
+        let parsed = {}, httpLib;
         try {
-            parsed = url_1.parse(url);
-            httpLib = httpLibs[parsed.protocol];
+            let urlObj = typeof url === 'string' ? new URL(url) : url;
+            parsed = Object.assign({}, {
+                host: urlObj.host,
+                hostname: urlObj.hostname,
+                path: urlObj.pathname + urlObj.search + urlObj.hash,
+                port: urlObj.port,
+                protocol: urlObj.protocol,
+            });
+            if (urlObj.username) {
+                parsed.auth = `${urlObj.username}:${urlObj.password}`;
+            }
+            httpLib = httpLibs[String(parsed.protocol)];
         }
         catch (err) {
             // Let the error be caught by the if statement below.
         }
         if (!httpLib) {
-            stream.emit('error', new Miniget.MinigetError('Invalid URL: ' + url));
+            stream.emit('error', new Miniget.MinigetError(`Invalid URL: ${url}`));
             return;
         }
         Object.assign(parsed, opts);
@@ -3786,7 +3559,7 @@ function Miniget(url, options = {}) {
             let start = downloaded + rangeStart;
             let end = rangeEnd || '';
             parsed.headers = Object.assign({}, parsed.headers, {
-                Range: `bytes=${start}-${end}`
+                Range: `bytes=${start}-${end}`,
             });
         }
         if (opts.transform) {
@@ -3798,102 +3571,151 @@ function Miniget(url, options = {}) {
                 return;
             }
             if (!parsed || parsed.protocol) {
-                httpLib = httpLibs[parsed === null || parsed === void 0 ? void 0 : parsed.protocol];
+                httpLib = httpLibs[String(parsed === null || parsed === void 0 ? void 0 : parsed.protocol)];
                 if (!httpLib) {
                     stream.emit('error', new Miniget.MinigetError('Invalid URL object from `transform` function'));
                     return;
                 }
             }
         }
-        activeRequest = httpLib.get(parsed, (res) => {
+        const onError = (err) => {
+            if (stream.destroyed || stream.readableEnded) {
+                return;
+            }
+            // Needed for node v10.
+            if (stream._readableState.ended) {
+                return;
+            }
+            cleanup();
+            if (!retryRequest({ err })) {
+                stream.emit('error', err);
+            }
+            else {
+                activeRequest.removeListener('close', onRequestClose);
+            }
+        };
+        const onRequestClose = () => {
+            cleanup();
+            retryRequest({});
+        };
+        const cleanup = () => {
+            activeRequest.removeListener('close', onRequestClose);
+            activeResponse === null || activeResponse === void 0 ? void 0 : activeResponse.removeListener('data', onData);
+            activeDecodedStream === null || activeDecodedStream === void 0 ? void 0 : activeDecodedStream.removeListener('end', onEnd);
+        };
+        const onData = (chunk) => { downloaded += chunk.length; };
+        const onEnd = () => {
+            cleanup();
+            if (!reconnectIfEndedEarly()) {
+                stream.end();
+            }
+        };
+        activeRequest = httpLib.request(parsed, (res) => {
+            // Needed for node v10, v12.
+            // istanbul ignore next
+            if (stream.destroyed) {
+                return;
+            }
             if (redirectStatusCodes.has(res.statusCode)) {
                 if (redirects++ >= opts.maxRedirects) {
                     stream.emit('error', new Miniget.MinigetError('Too many redirects'));
                 }
                 else {
-                    url = res.headers.location;
-                    setTimeout(doDownload, res.headers['retry-after'] ? parseInt(res.headers['retry-after'], 10) * 1000 : 0);
+                    if (res.headers.location) {
+                        url = res.headers.location;
+                    }
+                    else {
+                        let err = new Miniget.MinigetError('Redirect status code given with no location', res.statusCode);
+                        stream.emit('error', err);
+                        cleanup();
+                        return;
+                    }
+                    setTimeout(doDownload, parseInt(res.headers['retry-after'] || '0', 10) * 1000);
                     stream.emit('redirect', url);
                 }
+                cleanup();
                 return;
                 // Check for rate limiting.
             }
             else if (retryStatusCodes.has(res.statusCode)) {
-                if (!retryRequest({ retryAfter: parseInt(res.headers['retry-after'], 10) })) {
-                    let err = new Miniget.MinigetError('Status code: ' + res.statusCode);
+                if (!retryRequest({ retryAfter: parseInt(res.headers['retry-after'] || '0', 10) })) {
+                    let err = new Miniget.MinigetError(`Status code: ${res.statusCode}`, res.statusCode);
                     stream.emit('error', err);
                 }
+                cleanup();
                 return;
             }
-            else if (res.statusCode < 200 || 400 <= res.statusCode) {
-                let err = new Miniget.MinigetError('Status code: ' + res.statusCode);
+            else if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 400)) {
+                let err = new Miniget.MinigetError(`Status code: ${res.statusCode}`, res.statusCode);
                 if (res.statusCode >= 500) {
-                    onRequestError(err, res.statusCode);
+                    onError(err);
                 }
                 else {
                     stream.emit('error', err);
                 }
+                cleanup();
                 return;
             }
-            let decodedStream = res;
-            const cleanup = () => {
-                res.removeListener('data', ondata);
-                decodedStream.removeListener('end', onend);
-                decodedStream.removeListener('error', onerror);
-                res.removeListener('error', onerror);
-            };
-            const ondata = (chunk) => { downloaded += chunk.length; };
-            const onend = () => {
-                cleanup();
-                if (!reconnectIfEndedEarly()) {
-                    stream.end();
-                }
-            };
-            const onerror = (err) => {
-                cleanup();
-                onRequestError(err);
-            };
+            activeDecodedStream = res;
             if (opts.acceptEncoding && res.headers['content-encoding']) {
                 for (let enc of res.headers['content-encoding'].split(', ').reverse()) {
                     let fn = opts.acceptEncoding[enc];
-                    if (fn != null) {
-                        decodedStream = decodedStream.pipe(fn());
-                        decodedStream.on('error', onerror);
+                    if (fn) {
+                        activeDecodedStream = activeDecodedStream.pipe(fn());
+                        activeDecodedStream.on('error', onError);
                     }
                 }
             }
             if (!contentLength) {
-                contentLength = parseInt(res.headers['content-length'] + '', 10);
+                contentLength = parseInt(`${res.headers['content-length']}`, 10);
                 acceptRanges = res.headers['accept-ranges'] === 'bytes' &&
                     contentLength > 0 && opts.maxReconnects > 0;
             }
-            res.on('data', ondata);
-            decodedStream.on('end', onend);
-            decodedStream.pipe(stream, { end: !acceptRanges });
-            activeDecodedStream = decodedStream;
+            res.on('data', onData);
+            activeDecodedStream.on('end', onEnd);
+            activeDecodedStream.pipe(stream, { end: !acceptRanges });
+            activeResponse = res;
             stream.emit('response', res);
-            res.on('error', onerror);
+            res.on('error', onError);
             forwardEvents(res, responseEvents);
         });
-        activeRequest.on('error', onRequestError);
+        activeRequest.on('error', onError);
+        activeRequest.on('close', onRequestClose);
         forwardEvents(activeRequest, requestEvents);
+        if (stream.destroyed) {
+            streamDestroy(...destroyArgs);
+        }
         stream.emit('request', activeRequest);
+        activeRequest.end();
     };
-    stream.abort = () => {
-        aborted = true;
+    stream.abort = (err) => {
+        console.warn('`MinigetStream#abort()` has been deprecated in favor of `MinigetStream#destroy()`');
+        stream.aborted = true;
         stream.emit('abort');
-        activeRequest === null || activeRequest === void 0 ? void 0 : activeRequest.abort();
+        stream.destroy(err);
+    };
+    let destroyArgs;
+    const streamDestroy = (err) => {
+        activeRequest.destroy(err);
         activeDecodedStream === null || activeDecodedStream === void 0 ? void 0 : activeDecodedStream.unpipe(stream);
+        activeDecodedStream === null || activeDecodedStream === void 0 ? void 0 : activeDecodedStream.destroy();
         clearTimeout(retryTimeout);
     };
-    stream.text = () => __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-            let body = '';
-            stream.setEncoding('utf8');
-            stream.on('data', (chunk) => body += chunk);
-            stream.on('end', () => resolve(body));
-            stream.on('error', reject);
-        });
+    stream._destroy = (...args) => {
+        stream.destroyed = true;
+        if (activeRequest) {
+            streamDestroy(...args);
+        }
+        else {
+            destroyArgs = args;
+        }
+    };
+    stream.text = () => new Promise((resolve, reject) => {
+        let body = '';
+        stream.setEncoding('utf8');
+        stream.on('data', chunk => body += chunk);
+        stream.on('end', () => resolve(body));
+        stream.on('error', reject);
     });
     process.nextTick(doDownload);
     return stream;
@@ -3901,7 +3723,7 @@ function Miniget(url, options = {}) {
 module.exports = Miniget;
 
 }).call(this)}).call(this,require('_process'))
-},{"_process":20,"http":43,"https":7,"stream":28,"url":64}],19:[function(require,module,exports){
+},{"_process":19,"http":42,"https":7,"stream":27}],18:[function(require,module,exports){
 'use strict'
 
 module.exports = function createNotFoundError (path) {
@@ -3910,7 +3732,7 @@ module.exports = function createNotFoundError (path) {
   return err
 }
 
-},{}],20:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -4096,7 +3918,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],21:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 'use strict';
 
 var fillMissingKeys = require('fill-keys');
@@ -4191,7 +4013,7 @@ if (require.cache) {
   proxyquire.plugin = replacePrelude.plugin;
 }
 
-},{"fill-keys":6,"module-not-found-error":19}],22:[function(require,module,exports){
+},{"fill-keys":6,"module-not-found-error":18}],21:[function(require,module,exports){
 (function (global){(function (){
 /*! https://mths.be/punycode v1.4.1 by @mathias */
 ;(function(root) {
@@ -4728,7 +4550,7 @@ if (require.cache) {
 }(this));
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],23:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4814,7 +4636,7 @@ var isArray = Array.isArray || function (xs) {
   return Object.prototype.toString.call(xs) === '[object Array]';
 };
 
-},{}],24:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4901,14 +4723,13 @@ var objectKeys = Object.keys || function (obj) {
   return res;
 };
 
-},{}],25:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 'use strict';
 
 exports.decode = exports.parse = require('./decode');
 exports.encode = exports.stringify = require('./encode');
 
-},{"./decode":23,"./encode":24}],26:[function(require,module,exports){
-/*! safe-buffer. MIT License. Feross Aboukhadijeh <https://feross.org/opensource> */
+},{"./decode":22,"./encode":23}],25:[function(require,module,exports){
 /* eslint-disable node/no-deprecated-api */
 var buffer = require('buffer')
 var Buffer = buffer.Buffer
@@ -4930,8 +4751,6 @@ if (Buffer.from && Buffer.alloc && Buffer.allocUnsafe && Buffer.allocUnsafeSlow)
 function SafeBuffer (arg, encodingOrOffset, length) {
   return Buffer(arg, encodingOrOffset, length)
 }
-
-SafeBuffer.prototype = Object.create(Buffer.prototype)
 
 // Copy static methods from Buffer
 copyProps(Buffer, SafeBuffer)
@@ -4974,7 +4793,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
   return buffer.SlowBuffer(size)
 }
 
-},{"buffer":3}],27:[function(require,module,exports){
+},{"buffer":3}],26:[function(require,module,exports){
 (function (Buffer){(function (){
 ;(function (sax) { // wrapper for non-node envs
   sax.parser = function (strict, opt) { return new SAXParser(strict, opt) }
@@ -6543,7 +6362,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
 })(typeof exports === 'undefined' ? this.sax = {} : exports)
 
 }).call(this)}).call(this,require("buffer").Buffer)
-},{"buffer":3,"stream":28,"string_decoder":62}],28:[function(require,module,exports){
+},{"buffer":3,"stream":27,"string_decoder":61}],27:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6674,7 +6493,7 @@ Stream.prototype.pipe = function(dest, options) {
   return dest;
 };
 
-},{"events":5,"inherits":9,"readable-stream/lib/_stream_duplex.js":30,"readable-stream/lib/_stream_passthrough.js":31,"readable-stream/lib/_stream_readable.js":32,"readable-stream/lib/_stream_transform.js":33,"readable-stream/lib/_stream_writable.js":34,"readable-stream/lib/internal/streams/end-of-stream.js":38,"readable-stream/lib/internal/streams/pipeline.js":40}],29:[function(require,module,exports){
+},{"events":5,"inherits":9,"readable-stream/lib/_stream_duplex.js":29,"readable-stream/lib/_stream_passthrough.js":30,"readable-stream/lib/_stream_readable.js":31,"readable-stream/lib/_stream_transform.js":32,"readable-stream/lib/_stream_writable.js":33,"readable-stream/lib/internal/streams/end-of-stream.js":37,"readable-stream/lib/internal/streams/pipeline.js":39}],28:[function(require,module,exports){
 'use strict';
 
 function _inheritsLoose(subClass, superClass) { subClass.prototype = Object.create(superClass.prototype); subClass.prototype.constructor = subClass; subClass.__proto__ = superClass; }
@@ -6803,7 +6622,7 @@ createErrorType('ERR_UNKNOWN_ENCODING', function (arg) {
 createErrorType('ERR_STREAM_UNSHIFT_AFTER_END_EVENT', 'stream.unshift() after end event');
 module.exports.codes = codes;
 
-},{}],30:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 (function (process){(function (){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6945,7 +6764,7 @@ Object.defineProperty(Duplex.prototype, 'destroyed', {
   }
 });
 }).call(this)}).call(this,require('_process'))
-},{"./_stream_readable":32,"./_stream_writable":34,"_process":20,"inherits":9}],31:[function(require,module,exports){
+},{"./_stream_readable":31,"./_stream_writable":33,"_process":19,"inherits":9}],30:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6985,7 +6804,7 @@ function PassThrough(options) {
 PassThrough.prototype._transform = function (chunk, encoding, cb) {
   cb(null, chunk);
 };
-},{"./_stream_transform":33,"inherits":9}],32:[function(require,module,exports){
+},{"./_stream_transform":32,"inherits":9}],31:[function(require,module,exports){
 (function (process,global){(function (){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8112,7 +7931,7 @@ function indexOf(xs, x) {
   return -1;
 }
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../errors":29,"./_stream_duplex":30,"./internal/streams/async_iterator":35,"./internal/streams/buffer_list":36,"./internal/streams/destroy":37,"./internal/streams/from":39,"./internal/streams/state":41,"./internal/streams/stream":42,"_process":20,"buffer":3,"events":5,"inherits":9,"string_decoder/":62,"util":2}],33:[function(require,module,exports){
+},{"../errors":28,"./_stream_duplex":29,"./internal/streams/async_iterator":34,"./internal/streams/buffer_list":35,"./internal/streams/destroy":36,"./internal/streams/from":38,"./internal/streams/state":40,"./internal/streams/stream":41,"_process":19,"buffer":3,"events":5,"inherits":9,"string_decoder/":61,"util":2}],32:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8314,7 +8133,7 @@ function done(stream, er, data) {
   if (stream._transformState.transforming) throw new ERR_TRANSFORM_ALREADY_TRANSFORMING();
   return stream.push(null);
 }
-},{"../errors":29,"./_stream_duplex":30,"inherits":9}],34:[function(require,module,exports){
+},{"../errors":28,"./_stream_duplex":29,"inherits":9}],33:[function(require,module,exports){
 (function (process,global){(function (){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9014,7 +8833,7 @@ Writable.prototype._destroy = function (err, cb) {
   cb(err);
 };
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../errors":29,"./_stream_duplex":30,"./internal/streams/destroy":37,"./internal/streams/state":41,"./internal/streams/stream":42,"_process":20,"buffer":3,"inherits":9,"util-deprecate":66}],35:[function(require,module,exports){
+},{"../errors":28,"./_stream_duplex":29,"./internal/streams/destroy":36,"./internal/streams/state":40,"./internal/streams/stream":41,"_process":19,"buffer":3,"inherits":9,"util-deprecate":65}],34:[function(require,module,exports){
 (function (process){(function (){
 'use strict';
 
@@ -9224,7 +9043,7 @@ var createReadableStreamAsyncIterator = function createReadableStreamAsyncIterat
 
 module.exports = createReadableStreamAsyncIterator;
 }).call(this)}).call(this,require('_process'))
-},{"./end-of-stream":38,"_process":20}],36:[function(require,module,exports){
+},{"./end-of-stream":37,"_process":19}],35:[function(require,module,exports){
 'use strict';
 
 function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); if (enumerableOnly) symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; }); keys.push.apply(keys, symbols); } return keys; }
@@ -9435,7 +9254,7 @@ function () {
 
   return BufferList;
 }();
-},{"buffer":3,"util":2}],37:[function(require,module,exports){
+},{"buffer":3,"util":2}],36:[function(require,module,exports){
 (function (process){(function (){
 'use strict'; // undocumented cb() API, needed for core, not for public API
 
@@ -9543,7 +9362,7 @@ module.exports = {
   errorOrDestroy: errorOrDestroy
 };
 }).call(this)}).call(this,require('_process'))
-},{"_process":20}],38:[function(require,module,exports){
+},{"_process":19}],37:[function(require,module,exports){
 // Ported from https://github.com/mafintosh/end-of-stream with
 // permission from the author, Mathias Buus (@mafintosh).
 'use strict';
@@ -9648,12 +9467,12 @@ function eos(stream, opts, callback) {
 }
 
 module.exports = eos;
-},{"../../../errors":29}],39:[function(require,module,exports){
+},{"../../../errors":28}],38:[function(require,module,exports){
 module.exports = function () {
   throw new Error('Readable.from is not available in the browser')
 };
 
-},{}],40:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 // Ported from https://github.com/mafintosh/pump with
 // permission from the author, Mathias Buus (@mafintosh).
 'use strict';
@@ -9751,7 +9570,7 @@ function pipeline() {
 }
 
 module.exports = pipeline;
-},{"../../../errors":29,"./end-of-stream":38}],41:[function(require,module,exports){
+},{"../../../errors":28,"./end-of-stream":37}],40:[function(require,module,exports){
 'use strict';
 
 var ERR_INVALID_OPT_VALUE = require('../../../errors').codes.ERR_INVALID_OPT_VALUE;
@@ -9779,10 +9598,10 @@ function getHighWaterMark(state, options, duplexKey, isDuplex) {
 module.exports = {
   getHighWaterMark: getHighWaterMark
 };
-},{"../../../errors":29}],42:[function(require,module,exports){
+},{"../../../errors":28}],41:[function(require,module,exports){
 module.exports = require('events').EventEmitter;
 
-},{"events":5}],43:[function(require,module,exports){
+},{"events":5}],42:[function(require,module,exports){
 (function (global){(function (){
 var ClientRequest = require('./lib/request')
 var response = require('./lib/response')
@@ -9870,7 +9689,7 @@ http.METHODS = [
 	'UNSUBSCRIBE'
 ]
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./lib/request":45,"./lib/response":46,"builtin-status-codes":4,"url":64,"xtend":67}],44:[function(require,module,exports){
+},{"./lib/request":44,"./lib/response":45,"builtin-status-codes":4,"url":63,"xtend":66}],43:[function(require,module,exports){
 (function (global){(function (){
 exports.fetch = isFunction(global.fetch) && isFunction(global.ReadableStream)
 
@@ -9933,7 +9752,7 @@ function isFunction (value) {
 xhr = null // Help gc
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],45:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 (function (process,global,Buffer){(function (){
 var capability = require('./capability')
 var inherits = require('inherits')
@@ -10289,7 +10108,7 @@ var unsafeHeaders = [
 ]
 
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
-},{"./capability":44,"./response":46,"_process":20,"buffer":3,"inherits":9,"readable-stream":61}],46:[function(require,module,exports){
+},{"./capability":43,"./response":45,"_process":19,"buffer":3,"inherits":9,"readable-stream":60}],45:[function(require,module,exports){
 (function (process,global,Buffer){(function (){
 var capability = require('./capability')
 var inherits = require('inherits')
@@ -10504,35 +10323,35 @@ IncomingMessage.prototype._onXHRProgress = function (resetTimers) {
 }
 
 }).call(this)}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},require("buffer").Buffer)
-},{"./capability":44,"_process":20,"buffer":3,"inherits":9,"readable-stream":61}],47:[function(require,module,exports){
+},{"./capability":43,"_process":19,"buffer":3,"inherits":9,"readable-stream":60}],46:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"dup":28}],47:[function(require,module,exports){
 arguments[4][29][0].apply(exports,arguments)
-},{"dup":29}],48:[function(require,module,exports){
+},{"./_stream_readable":49,"./_stream_writable":51,"_process":19,"dup":29,"inherits":9}],48:[function(require,module,exports){
 arguments[4][30][0].apply(exports,arguments)
-},{"./_stream_readable":50,"./_stream_writable":52,"_process":20,"dup":30,"inherits":9}],49:[function(require,module,exports){
+},{"./_stream_transform":50,"dup":30,"inherits":9}],49:[function(require,module,exports){
 arguments[4][31][0].apply(exports,arguments)
-},{"./_stream_transform":51,"dup":31,"inherits":9}],50:[function(require,module,exports){
+},{"../errors":46,"./_stream_duplex":47,"./internal/streams/async_iterator":52,"./internal/streams/buffer_list":53,"./internal/streams/destroy":54,"./internal/streams/from":56,"./internal/streams/state":58,"./internal/streams/stream":59,"_process":19,"buffer":3,"dup":31,"events":5,"inherits":9,"string_decoder/":61,"util":2}],50:[function(require,module,exports){
 arguments[4][32][0].apply(exports,arguments)
-},{"../errors":47,"./_stream_duplex":48,"./internal/streams/async_iterator":53,"./internal/streams/buffer_list":54,"./internal/streams/destroy":55,"./internal/streams/from":57,"./internal/streams/state":59,"./internal/streams/stream":60,"_process":20,"buffer":3,"dup":32,"events":5,"inherits":9,"string_decoder/":62,"util":2}],51:[function(require,module,exports){
+},{"../errors":46,"./_stream_duplex":47,"dup":32,"inherits":9}],51:[function(require,module,exports){
 arguments[4][33][0].apply(exports,arguments)
-},{"../errors":47,"./_stream_duplex":48,"dup":33,"inherits":9}],52:[function(require,module,exports){
+},{"../errors":46,"./_stream_duplex":47,"./internal/streams/destroy":54,"./internal/streams/state":58,"./internal/streams/stream":59,"_process":19,"buffer":3,"dup":33,"inherits":9,"util-deprecate":65}],52:[function(require,module,exports){
 arguments[4][34][0].apply(exports,arguments)
-},{"../errors":47,"./_stream_duplex":48,"./internal/streams/destroy":55,"./internal/streams/state":59,"./internal/streams/stream":60,"_process":20,"buffer":3,"dup":34,"inherits":9,"util-deprecate":66}],53:[function(require,module,exports){
+},{"./end-of-stream":55,"_process":19,"dup":34}],53:[function(require,module,exports){
 arguments[4][35][0].apply(exports,arguments)
-},{"./end-of-stream":56,"_process":20,"dup":35}],54:[function(require,module,exports){
+},{"buffer":3,"dup":35,"util":2}],54:[function(require,module,exports){
 arguments[4][36][0].apply(exports,arguments)
-},{"buffer":3,"dup":36,"util":2}],55:[function(require,module,exports){
+},{"_process":19,"dup":36}],55:[function(require,module,exports){
 arguments[4][37][0].apply(exports,arguments)
-},{"_process":20,"dup":37}],56:[function(require,module,exports){
+},{"../../../errors":46,"dup":37}],56:[function(require,module,exports){
 arguments[4][38][0].apply(exports,arguments)
-},{"../../../errors":47,"dup":38}],57:[function(require,module,exports){
+},{"dup":38}],57:[function(require,module,exports){
 arguments[4][39][0].apply(exports,arguments)
-},{"dup":39}],58:[function(require,module,exports){
+},{"../../../errors":46,"./end-of-stream":55,"dup":39}],58:[function(require,module,exports){
 arguments[4][40][0].apply(exports,arguments)
-},{"../../../errors":47,"./end-of-stream":56,"dup":40}],59:[function(require,module,exports){
+},{"../../../errors":46,"dup":40}],59:[function(require,module,exports){
 arguments[4][41][0].apply(exports,arguments)
-},{"../../../errors":47,"dup":41}],60:[function(require,module,exports){
-arguments[4][42][0].apply(exports,arguments)
-},{"dup":42,"events":5}],61:[function(require,module,exports){
+},{"dup":41,"events":5}],60:[function(require,module,exports){
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = exports;
 exports.Readable = exports;
@@ -10543,7 +10362,7 @@ exports.PassThrough = require('./lib/_stream_passthrough.js');
 exports.finished = require('./lib/internal/streams/end-of-stream.js');
 exports.pipeline = require('./lib/internal/streams/pipeline.js');
 
-},{"./lib/_stream_duplex.js":48,"./lib/_stream_passthrough.js":49,"./lib/_stream_readable.js":50,"./lib/_stream_transform.js":51,"./lib/_stream_writable.js":52,"./lib/internal/streams/end-of-stream.js":56,"./lib/internal/streams/pipeline.js":58}],62:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":47,"./lib/_stream_passthrough.js":48,"./lib/_stream_readable.js":49,"./lib/_stream_transform.js":50,"./lib/_stream_writable.js":51,"./lib/internal/streams/end-of-stream.js":55,"./lib/internal/streams/pipeline.js":57}],61:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -10840,7 +10659,7 @@ function simpleWrite(buf) {
 function simpleEnd(buf) {
   return buf && buf.length ? this.write(buf) : '';
 }
-},{"safe-buffer":26}],63:[function(require,module,exports){
+},{"safe-buffer":25}],62:[function(require,module,exports){
 (function (setImmediate,clearImmediate){(function (){
 var nextTick = require('process/browser.js').nextTick;
 var apply = Function.prototype.apply;
@@ -10919,7 +10738,7 @@ exports.clearImmediate = typeof clearImmediate === "function" ? clearImmediate :
   delete immediateIds[id];
 };
 }).call(this)}).call(this,require("timers").setImmediate,require("timers").clearImmediate)
-},{"process/browser.js":20,"timers":63}],64:[function(require,module,exports){
+},{"process/browser.js":19,"timers":62}],63:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -11653,7 +11472,7 @@ Url.prototype.parseHost = function() {
   if (host) this.hostname = host;
 };
 
-},{"./util":65,"punycode":22,"querystring":25}],65:[function(require,module,exports){
+},{"./util":64,"punycode":21,"querystring":24}],64:[function(require,module,exports){
 'use strict';
 
 module.exports = {
@@ -11671,7 +11490,7 @@ module.exports = {
   }
 };
 
-},{}],66:[function(require,module,exports){
+},{}],65:[function(require,module,exports){
 (function (global){(function (){
 
 /**
@@ -11742,7 +11561,7 @@ function config (name) {
 }
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],67:[function(require,module,exports){
+},{}],66:[function(require,module,exports){
 module.exports = extend
 
 var hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -11763,7 +11582,7 @@ function extend() {
     return target
 }
 
-},{}],68:[function(require,module,exports){
+},{}],67:[function(require,module,exports){
 const { setTimeout } = require('timers');
 
 // A cache that expires.
@@ -11819,7 +11638,7 @@ module.exports = class Cache extends Map {
   }
 };
 
-},{"timers":63}],69:[function(require,module,exports){
+},{"timers":62}],68:[function(require,module,exports){
 const utils = require('./utils');
 const FORMATS = require('./formats');
 
@@ -12071,7 +11890,7 @@ exports.addFormatMeta = format => {
   return format;
 };
 
-},{"./formats":70,"./utils":76}],70:[function(require,module,exports){
+},{"./formats":69,"./utils":75}],69:[function(require,module,exports){
 /**
  * http://en.wikipedia.org/wiki/YouTube#Quality_and_formats
  */
@@ -12597,7 +12416,7 @@ module.exports = {
 
 };
 
-},{}],71:[function(require,module,exports){
+},{}],70:[function(require,module,exports){
 (function (setImmediate){(function (){
 const PassThrough = require('stream').PassThrough;
 const getInfo = require('./info');
@@ -12808,7 +12627,7 @@ ytdl.downloadFromInfo = (info, options) => {
 };
 
 }).call(this)}).call(this,require("timers").setImmediate)
-},{"../package.json":83,"./format-utils":69,"./info":73,"./sig":74,"./url-utils":75,"./utils":76,"m3u8stream":78,"miniget":82,"stream":28,"timers":63}],72:[function(require,module,exports){
+},{"../package.json":76,"./format-utils":68,"./info":72,"./sig":73,"./url-utils":74,"./utils":75,"m3u8stream":12,"miniget":17,"stream":27,"timers":62}],71:[function(require,module,exports){
 const utils = require('./utils');
 const qs = require('querystring');
 const { parseTimestamp } = require('m3u8stream');
@@ -13175,7 +12994,7 @@ exports.getChapters = info => {
   }));
 };
 
-},{"./utils":76,"m3u8stream":78,"querystring":25}],73:[function(require,module,exports){
+},{"./utils":75,"m3u8stream":12,"querystring":24}],72:[function(require,module,exports){
 const querystring = require('querystring');
 const sax = require('sax');
 const miniget = require('miniget');
@@ -13664,7 +13483,7 @@ exports.validateURL = urlUtils.validateURL;
 exports.getURLVideoID = urlUtils.getURLVideoID;
 exports.getVideoID = urlUtils.getVideoID;
 
-},{"./cache":68,"./format-utils":69,"./info-extras":72,"./sig":74,"./url-utils":75,"./utils":76,"miniget":82,"querystring":25,"sax":27,"timers":63}],74:[function(require,module,exports){
+},{"./cache":67,"./format-utils":68,"./info-extras":71,"./sig":73,"./url-utils":74,"./utils":75,"miniget":17,"querystring":24,"sax":26,"timers":62}],73:[function(require,module,exports){
 const querystring = require('querystring');
 const Cache = require('./cache');
 const utils = require('./utils');
@@ -13912,7 +13731,7 @@ exports.decipherFormats = async(formats, html5player, options) => {
   return decipheredFormats;
 };
 
-},{"./cache":68,"./utils":76,"querystring":25}],75:[function(require,module,exports){
+},{"./cache":67,"./utils":75,"querystring":24}],74:[function(require,module,exports){
 /**
  * Get video ID.
  *
@@ -14005,7 +13824,7 @@ exports.validateURL = string => {
   }
 };
 
-},{}],76:[function(require,module,exports){
+},{}],75:[function(require,module,exports){
 (function (process){(function (){
 const miniget = require('miniget');
 
@@ -14192,920 +14011,31 @@ exports.checkForUpdates = () => {
 };
 
 }).call(this)}).call(this,require('_process'))
-},{"../package.json":83,"_process":20,"miniget":82}],77:[function(require,module,exports){
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const stream_1 = require("stream");
-const sax_1 = __importDefault(require("sax"));
-const parse_time_1 = require("./parse-time");
-/**
- * A wrapper around sax that emits segments.
- */
-class DashMPDParser extends stream_1.Writable {
-    constructor(targetID) {
-        super();
-        this._parser = sax_1.default.createStream(false, { lowercase: true });
-        this._parser.on('error', this.destroy.bind(this));
-        let lastTag;
-        let currtime = 0;
-        let seq = 0;
-        let segmentTemplate;
-        let timescale, offset, duration, baseURL;
-        let timeline = [];
-        let getSegments = false;
-        let gotSegments = false;
-        let isStatic;
-        let treeLevel;
-        let periodStart;
-        const tmpl = (str) => {
-            const context = {
-                RepresentationID: targetID,
-                Number: seq,
-                Time: currtime,
-            };
-            return str.replace(/\$(\w+)\$/g, (m, p1) => `${context[p1]}`);
-        };
-        this._parser.on('opentag', node => {
-            switch (node.name) {
-                case 'mpd':
-                    currtime =
-                        node.attributes.availabilitystarttime ?
-                            new Date(node.attributes.availabilitystarttime).getTime() : 0;
-                    isStatic = node.attributes.type !== 'dynamic';
-                    break;
-                case 'period':
-                    // Reset everything on <Period> tag.
-                    seq = 0;
-                    timescale = 1000;
-                    duration = 0;
-                    offset = 0;
-                    baseURL = [];
-                    treeLevel = 0;
-                    periodStart = parse_time_1.durationStr(node.attributes.start) || 0;
-                    break;
-                case 'segmentlist':
-                    seq = parseInt(node.attributes.startnumber) || seq;
-                    timescale = parseInt(node.attributes.timescale) || timescale;
-                    duration = parseInt(node.attributes.duration) || duration;
-                    offset = parseInt(node.attributes.presentationtimeoffset) || offset;
-                    break;
-                case 'segmenttemplate':
-                    segmentTemplate = node.attributes;
-                    seq = parseInt(node.attributes.startnumber) || seq;
-                    timescale = parseInt(node.attributes.timescale) || timescale;
-                    break;
-                case 'segmenttimeline':
-                case 'baseurl':
-                    lastTag = node.name;
-                    break;
-                case 's':
-                    timeline.push({
-                        duration: parseInt(node.attributes.d),
-                        repeat: parseInt(node.attributes.r),
-                        time: parseInt(node.attributes.t),
-                    });
-                    break;
-                case 'adaptationset':
-                case 'representation':
-                    treeLevel++;
-                    if (!targetID) {
-                        targetID = node.attributes.id;
-                    }
-                    getSegments = node.attributes.id === `${targetID}`;
-                    if (getSegments) {
-                        if (periodStart) {
-                            currtime += periodStart;
-                        }
-                        if (offset) {
-                            currtime -= offset / timescale * 1000;
-                        }
-                        this.emit('starttime', currtime);
-                    }
-                    break;
-                case 'initialization':
-                    if (getSegments) {
-                        this.emit('item', {
-                            url: baseURL.filter(s => !!s).join('') + node.attributes.sourceurl,
-                            seq: seq,
-                            init: true,
-                            duration: 0,
-                        });
-                    }
-                    break;
-                case 'segmenturl':
-                    if (getSegments) {
-                        gotSegments = true;
-                        let tl = timeline.shift();
-                        let segmentDuration = ((tl === null || tl === void 0 ? void 0 : tl.duration) || duration) / timescale * 1000;
-                        this.emit('item', {
-                            url: baseURL.filter(s => !!s).join('') + node.attributes.media,
-                            seq: seq++,
-                            duration: segmentDuration,
-                        });
-                        currtime += segmentDuration;
-                    }
-                    break;
-            }
-        });
-        const onEnd = () => {
-            if (isStatic) {
-                this.emit('endlist');
-            }
-            if (!getSegments) {
-                this.destroy(Error(`Representation '${targetID}' not found`));
-            }
-            else {
-                this.emit('end');
-            }
-        };
-        this._parser.on('closetag', tagName => {
-            switch (tagName) {
-                case 'adaptationset':
-                case 'representation':
-                    treeLevel--;
-                    if (segmentTemplate && timeline.length) {
-                        gotSegments = true;
-                        if (segmentTemplate.initialization) {
-                            this.emit('item', {
-                                url: baseURL.filter(s => !!s).join('') +
-                                    tmpl(segmentTemplate.initialization),
-                                seq: seq,
-                                init: true,
-                                duration: 0,
-                            });
-                        }
-                        for (let { duration: itemDuration, repeat, time } of timeline) {
-                            itemDuration = itemDuration / timescale * 1000;
-                            repeat = repeat || 1;
-                            currtime = time || currtime;
-                            for (let i = 0; i < repeat; i++) {
-                                this.emit('item', {
-                                    url: baseURL.filter(s => !!s).join('') +
-                                        tmpl(segmentTemplate.media),
-                                    seq: seq++,
-                                    duration: itemDuration,
-                                });
-                                currtime += itemDuration;
-                            }
-                        }
-                    }
-                    if (gotSegments) {
-                        this.emit('endearly');
-                        onEnd();
-                        this._parser.removeAllListeners();
-                        this.removeAllListeners('finish');
-                    }
-                    break;
-            }
-        });
-        this._parser.on('text', text => {
-            if (lastTag === 'baseurl') {
-                baseURL[treeLevel] = text;
-                lastTag = null;
-            }
-        });
-        this.on('finish', onEnd);
-    }
-    _write(chunk, encoding, callback) {
-        this._parser.write(chunk, encoding);
-        callback();
-    }
-}
-exports.default = DashMPDParser;
-
-},{"./parse-time":80,"sax":27,"stream":28}],78:[function(require,module,exports){
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-const stream_1 = require("stream");
-const miniget_1 = __importDefault(require("miniget"));
-const m3u8_parser_1 = __importDefault(require("./m3u8-parser"));
-const dash_mpd_parser_1 = __importDefault(require("./dash-mpd-parser"));
-const queue_1 = require("./queue");
-const parse_time_1 = require("./parse-time");
-const supportedParsers = {
-    m3u8: m3u8_parser_1.default,
-    'dash-mpd': dash_mpd_parser_1.default,
-};
-let m3u8stream = ((playlistURL, options = {}) => {
-    const stream = new stream_1.PassThrough();
-    const chunkReadahead = options.chunkReadahead || 3;
-    // 20 seconds.
-    const liveBuffer = options.liveBuffer || 20000;
-    const requestOptions = options.requestOptions;
-    const Parser = supportedParsers[options.parser || (/\.mpd$/.test(playlistURL) ? 'dash-mpd' : 'm3u8')];
-    if (!Parser) {
-        throw TypeError(`parser '${options.parser}' not supported`);
-    }
-    let begin = 0;
-    if (typeof options.begin !== 'undefined') {
-        begin = typeof options.begin === 'string' ?
-            parse_time_1.humanStr(options.begin) :
-            Math.max(options.begin - liveBuffer, 0);
-    }
-    const forwardEvents = (req) => {
-        for (let event of ['abort', 'request', 'response', 'redirect', 'retry', 'reconnect']) {
-            req.on(event, stream.emit.bind(stream, event));
-        }
-    };
-    let currSegment;
-    const streamQueue = new queue_1.Queue((req, callback) => {
-        currSegment = req;
-        // Count the size manually, since the `content-length` header is not
-        // always there.
-        let size = 0;
-        req.on('data', (chunk) => size += chunk.length);
-        req.pipe(stream, { end: false });
-        req.on('end', () => callback(null, size));
-    }, { concurrency: 1 });
-    let segmentNumber = 0;
-    let downloaded = 0;
-    const requestQueue = new queue_1.Queue((segment, callback) => {
-        let reqOptions = Object.assign({}, requestOptions);
-        if (segment.range) {
-            reqOptions.headers = Object.assign({}, reqOptions.headers, {
-                Range: `bytes=${segment.range.start}-${segment.range.end}`,
-            });
-        }
-        let req = miniget_1.default(new URL(segment.url, playlistURL).toString(), reqOptions);
-        req.on('error', callback);
-        forwardEvents(req);
-        streamQueue.push(req, (_, size) => {
-            downloaded += +size;
-            stream.emit('progress', {
-                num: ++segmentNumber,
-                size: size,
-                duration: segment.duration,
-                url: segment.url,
-            }, requestQueue.total, downloaded);
-            callback(null);
-        });
-    }, { concurrency: chunkReadahead });
-    const onError = (err) => {
-        if (ended) {
-            return;
-        }
-        stream.emit('error', err);
-        // Stop on any error.
-        stream.end();
-    };
-    // When to look for items again.
-    let refreshThreshold;
-    let minRefreshTime;
-    let refreshTimeout;
-    let fetchingPlaylist = true;
-    let ended = false;
-    let isStatic = false;
-    let lastRefresh;
-    const onQueuedEnd = (err) => {
-        currSegment = null;
-        if (err) {
-            onError(err);
-        }
-        else if (!fetchingPlaylist && !ended && !isStatic &&
-            requestQueue.tasks.length + requestQueue.active <= refreshThreshold) {
-            let ms = Math.max(0, minRefreshTime - (Date.now() - lastRefresh));
-            fetchingPlaylist = true;
-            refreshTimeout = setTimeout(refreshPlaylist, ms);
-        }
-        else if ((ended || isStatic) &&
-            !requestQueue.tasks.length && !requestQueue.active) {
-            stream.end();
-        }
-    };
-    let currPlaylist;
-    let lastSeq;
-    let starttime = 0;
-    const refreshPlaylist = () => {
-        lastRefresh = Date.now();
-        currPlaylist = miniget_1.default(playlistURL, requestOptions);
-        currPlaylist.on('error', onError);
-        forwardEvents(currPlaylist);
-        const parser = currPlaylist.pipe(new Parser(options.id));
-        parser.on('starttime', (a) => {
-            if (starttime) {
-                return;
-            }
-            starttime = a;
-            if (typeof options.begin === 'string' && begin >= 0) {
-                begin += starttime;
-            }
-        });
-        parser.on('endlist', () => { isStatic = true; });
-        parser.on('endearly', currPlaylist.unpipe.bind(currPlaylist, parser));
-        let addedItems = [];
-        const addItem = (item) => {
-            if (!item.init) {
-                if (item.seq <= lastSeq) {
-                    return;
-                }
-                lastSeq = item.seq;
-            }
-            begin = item.time;
-            requestQueue.push(item, onQueuedEnd);
-            addedItems.push(item);
-        };
-        let tailedItems = [], tailedItemsDuration = 0;
-        parser.on('item', (item) => {
-            let timedItem = Object.assign({ time: starttime }, item);
-            if (begin <= timedItem.time) {
-                addItem(timedItem);
-            }
-            else {
-                tailedItems.push(timedItem);
-                tailedItemsDuration += timedItem.duration;
-                // Only keep the last `liveBuffer` of items.
-                while (tailedItems.length > 1 &&
-                    tailedItemsDuration - tailedItems[0].duration > liveBuffer) {
-                    const lastItem = tailedItems.shift();
-                    tailedItemsDuration -= lastItem.duration;
-                }
-            }
-            starttime += timedItem.duration;
-        });
-        parser.on('end', () => {
-            currPlaylist = null;
-            // If we are too ahead of the stream, make sure to get the
-            // latest available items with a small buffer.
-            if (!addedItems.length && tailedItems.length) {
-                tailedItems.forEach(item => { addItem(item); });
-            }
-            // Refresh the playlist when remaining segments get low.
-            refreshThreshold = Math.max(1, Math.ceil(addedItems.length * 0.01));
-            // Throttle refreshing the playlist by looking at the duration
-            // of live items added on this refresh.
-            minRefreshTime =
-                addedItems.reduce((total, item) => item.duration + total, 0);
-            fetchingPlaylist = false;
-            onQueuedEnd(null);
-        });
-    };
-    refreshPlaylist();
-    stream.end = () => {
-        ended = true;
-        streamQueue.die();
-        requestQueue.die();
-        clearTimeout(refreshTimeout);
-        currPlaylist === null || currPlaylist === void 0 ? void 0 : currPlaylist.destroy();
-        currSegment === null || currSegment === void 0 ? void 0 : currSegment.destroy();
-        stream_1.PassThrough.prototype.end.call(stream, null);
-    };
-    return stream;
-});
-m3u8stream.parseTimestamp = parse_time_1.humanStr;
-module.exports = m3u8stream;
-
-},{"./dash-mpd-parser":77,"./m3u8-parser":79,"./parse-time":80,"./queue":81,"miniget":82,"stream":28}],79:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const stream_1 = require("stream");
-/**
- * A very simple m3u8 playlist file parser that detects tags and segments.
- */
-class m3u8Parser extends stream_1.Writable {
-    constructor() {
-        super();
-        this._lastLine = '';
-        this._seq = 0;
-        this._nextItemDuration = null;
-        this._nextItemRange = null;
-        this._lastItemRangeEnd = 0;
-        this.on('finish', () => {
-            this._parseLine(this._lastLine);
-            this.emit('end');
-        });
-    }
-    _parseAttrList(value) {
-        let attrs = {};
-        let regex = /([A-Z0-9-]+)=(?:"([^"]*?)"|([^,]*?))/g;
-        let match;
-        while ((match = regex.exec(value)) !== null) {
-            attrs[match[1]] = match[2] || match[3];
-        }
-        return attrs;
-    }
-    _parseRange(value) {
-        if (!value)
-            return null;
-        let svalue = value.split('@');
-        let start = svalue[1] ? parseInt(svalue[1]) : this._lastItemRangeEnd + 1;
-        let end = start + parseInt(svalue[0]) - 1;
-        let range = { start, end };
-        this._lastItemRangeEnd = range.end;
-        return range;
-    }
-    _parseLine(line) {
-        let match = line.match(/^#(EXT[A-Z0-9-]+)(?::(.*))?/);
-        if (match) {
-            // This is a tag.
-            const tag = match[1];
-            const value = match[2] || '';
-            switch (tag) {
-                case 'EXT-X-PROGRAM-DATE-TIME':
-                    this.emit('starttime', new Date(value).getTime());
-                    break;
-                case 'EXT-X-MEDIA-SEQUENCE':
-                    this._seq = parseInt(value);
-                    break;
-                case 'EXT-X-MAP': {
-                    let attrs = this._parseAttrList(value);
-                    if (!attrs.URI) {
-                        this.destroy(new Error('`EXT-X-MAP` found without required attribute `URI`'));
-                        return;
-                    }
-                    this.emit('item', {
-                        url: attrs.URI,
-                        seq: this._seq,
-                        init: true,
-                        duration: 0,
-                        range: this._parseRange(attrs.BYTERANGE),
-                    });
-                    break;
-                }
-                case 'EXT-X-BYTERANGE': {
-                    this._nextItemRange = this._parseRange(value);
-                    break;
-                }
-                case 'EXTINF':
-                    this._nextItemDuration =
-                        Math.round(parseFloat(value.split(',')[0]) * 1000);
-                    break;
-                case 'EXT-X-ENDLIST':
-                    this.emit('endlist');
-                    break;
-            }
-        }
-        else if (!/^#/.test(line) && line.trim()) {
-            // This is a segment
-            this.emit('item', {
-                url: line.trim(),
-                seq: this._seq++,
-                duration: this._nextItemDuration,
-                range: this._nextItemRange,
-            });
-            this._nextItemRange = null;
-        }
-    }
-    _write(chunk, encoding, callback) {
-        let lines = chunk.toString('utf8').split('\n');
-        if (this._lastLine) {
-            lines[0] = this._lastLine + lines[0];
-        }
-        lines.forEach((line, i) => {
-            if (this.destroyed)
-                return;
-            if (i < lines.length - 1) {
-                this._parseLine(line);
-            }
-            else {
-                // Save the last line in case it has been broken up.
-                this._lastLine = line;
-            }
-        });
-        callback();
-    }
-}
-exports.default = m3u8Parser;
-
-},{"stream":28}],80:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.durationStr = exports.humanStr = void 0;
-const numberFormat = /^\d+$/;
-const timeFormat = /^(?:(?:(\d+):)?(\d{1,2}):)?(\d{1,2})(?:\.(\d{3}))?$/;
-const timeUnits = {
-    ms: 1,
-    s: 1000,
-    m: 60000,
-    h: 3600000,
-};
-/**
- * Converts human friendly time to milliseconds. Supports the format
- * 00:00:00.000 for hours, minutes, seconds, and milliseconds respectively.
- * And 0ms, 0s, 0m, 0h, and together 1m1s.
- *
- * @param {number|string} time
- * @returns {number}
- */
-exports.humanStr = (time) => {
-    if (typeof time === 'number') {
-        return time;
-    }
-    if (numberFormat.test(time)) {
-        return +time;
-    }
-    const firstFormat = timeFormat.exec(time);
-    if (firstFormat) {
-        return (+(firstFormat[1] || 0) * timeUnits.h) +
-            (+(firstFormat[2] || 0) * timeUnits.m) +
-            (+firstFormat[3] * timeUnits.s) +
-            +(firstFormat[4] || 0);
-    }
-    else {
-        let total = 0;
-        const r = /(-?\d+)(ms|s|m|h)/g;
-        let rs;
-        while ((rs = r.exec(time)) !== null) {
-            total += +rs[1] * timeUnits[rs[2]];
-        }
-        return total;
-    }
-};
-/**
- * Parses a duration string in the form of "123.456S", returns milliseconds.
- *
- * @param {string} time
- * @returns {number}
- */
-exports.durationStr = (time) => {
-    let total = 0;
-    const r = /(\d+(?:\.\d+)?)(S|M|H)/g;
-    let rs;
-    while ((rs = r.exec(time)) !== null) {
-        total += +rs[1] * timeUnits[rs[2].toLowerCase()];
-    }
-    return total;
-};
-
-},{}],81:[function(require,module,exports){
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.Queue = void 0;
-class Queue {
-    /**
-     * A really simple queue with concurrency.
-     *
-     * @param {Function} worker
-     * @param {Object} options
-     * @param {!number} options.concurrency
-     */
-    constructor(worker, options = {}) {
-        this._worker = worker;
-        this._concurrency = options.concurrency || 1;
-        this.tasks = [];
-        this.total = 0;
-        this.active = 0;
-    }
-    /**
-     * Push a task to the queue.
-     *
-     *  @param {T} item
-     *  @param {!Function} callback
-     */
-    push(item, callback) {
-        this.tasks.push({ item, callback });
-        this.total++;
-        this._next();
-    }
-    /**
-     * Process next job in queue.
-     */
-    _next() {
-        if (this.active >= this._concurrency || !this.tasks.length) {
-            return;
-        }
-        const { item, callback } = this.tasks.shift();
-        let callbackCalled = false;
-        this.active++;
-        this._worker(item, (err, result) => {
-            if (callbackCalled) {
-                return;
-            }
-            this.active--;
-            callbackCalled = true;
-            callback === null || callback === void 0 ? void 0 : callback(err, result);
-            this._next();
-        });
-    }
-    /**
-     * Stops processing queued jobs.
-     */
-    die() {
-        this.tasks = [];
-    }
-}
-exports.Queue = Queue;
-
-},{}],82:[function(require,module,exports){
-(function (process){(function (){
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-const http_1 = __importDefault(require("http"));
-const https_1 = __importDefault(require("https"));
-const stream_1 = require("stream");
-const httpLibs = { 'http:': http_1.default, 'https:': https_1.default };
-const redirectStatusCodes = new Set([301, 302, 303, 307, 308]);
-const retryStatusCodes = new Set([429, 503]);
-// `request`, `response`, `abort`, left out, miniget will emit these.
-const requestEvents = ['connect', 'continue', 'information', 'socket', 'timeout', 'upgrade'];
-const responseEvents = ['aborted'];
-Miniget.MinigetError = class MinigetError extends Error {
-    constructor(message, statusCode) {
-        super(message);
-        this.statusCode = statusCode;
-    }
-};
-Miniget.defaultOptions = {
-    maxRedirects: 10,
-    maxRetries: 2,
-    maxReconnects: 0,
-    backoff: { inc: 100, max: 10000 },
-};
-function Miniget(url, options = {}) {
-    var _a;
-    const opts = Object.assign({}, Miniget.defaultOptions, options);
-    const stream = new stream_1.PassThrough({ highWaterMark: opts.highWaterMark });
-    stream.destroyed = stream.aborted = false;
-    let activeRequest;
-    let activeResponse;
-    let activeDecodedStream;
-    let redirects = 0;
-    let retries = 0;
-    let retryTimeout;
-    let reconnects = 0;
-    let contentLength;
-    let acceptRanges = false;
-    let rangeStart = 0, rangeEnd;
-    let downloaded = 0;
-    // Check if this is a ranged request.
-    if ((_a = opts.headers) === null || _a === void 0 ? void 0 : _a.Range) {
-        let r = /bytes=(\d+)-(\d+)?/.exec(`${opts.headers.Range}`);
-        if (r) {
-            rangeStart = parseInt(r[1], 10);
-            rangeEnd = parseInt(r[2], 10);
-        }
-    }
-    // Add `Accept-Encoding` header.
-    if (opts.acceptEncoding) {
-        opts.headers = Object.assign({
-            'Accept-Encoding': Object.keys(opts.acceptEncoding).join(', '),
-        }, opts.headers);
-    }
-    const downloadHasStarted = () => activeDecodedStream && downloaded > 0;
-    const downloadComplete = () => !acceptRanges || downloaded === contentLength;
-    const reconnect = (err) => {
-        activeDecodedStream = null;
-        retries = 0;
-        let inc = opts.backoff.inc;
-        let ms = Math.min(inc, opts.backoff.max);
-        retryTimeout = setTimeout(doDownload, ms);
-        stream.emit('reconnect', reconnects, err);
-    };
-    const reconnectIfEndedEarly = (err) => {
-        if (options.method !== 'HEAD' && !downloadComplete() && reconnects++ < opts.maxReconnects) {
-            reconnect(err);
-            return true;
-        }
-        return false;
-    };
-    const retryRequest = (retryOptions) => {
-        if (stream.destroyed) {
-            return false;
-        }
-        if (downloadHasStarted()) {
-            return reconnectIfEndedEarly(retryOptions.err);
-        }
-        else if ((!retryOptions.err || retryOptions.err.message === 'ENOTFOUND') &&
-            retries++ < opts.maxRetries) {
-            let ms = retryOptions.retryAfter ||
-                Math.min(retries * opts.backoff.inc, opts.backoff.max);
-            retryTimeout = setTimeout(doDownload, ms);
-            stream.emit('retry', retries, retryOptions.err);
-            return true;
-        }
-        return false;
-    };
-    const forwardEvents = (ee, events) => {
-        for (let event of events) {
-            ee.on(event, stream.emit.bind(stream, event));
-        }
-    };
-    const doDownload = () => {
-        let parsed = {}, httpLib;
-        try {
-            let urlObj = typeof url === 'string' ? new URL(url) : url;
-            parsed = Object.assign({}, {
-                host: urlObj.host,
-                hostname: urlObj.hostname,
-                path: urlObj.pathname + urlObj.search + urlObj.hash,
-                port: urlObj.port,
-                protocol: urlObj.protocol,
-            });
-            if (urlObj.username) {
-                parsed.auth = `${urlObj.username}:${urlObj.password}`;
-            }
-            httpLib = httpLibs[String(parsed.protocol)];
-        }
-        catch (err) {
-            // Let the error be caught by the if statement below.
-        }
-        if (!httpLib) {
-            stream.emit('error', new Miniget.MinigetError(`Invalid URL: ${url}`));
-            return;
-        }
-        Object.assign(parsed, opts);
-        if (acceptRanges && downloaded > 0) {
-            let start = downloaded + rangeStart;
-            let end = rangeEnd || '';
-            parsed.headers = Object.assign({}, parsed.headers, {
-                Range: `bytes=${start}-${end}`,
-            });
-        }
-        if (opts.transform) {
-            try {
-                parsed = opts.transform(parsed);
-            }
-            catch (err) {
-                stream.emit('error', err);
-                return;
-            }
-            if (!parsed || parsed.protocol) {
-                httpLib = httpLibs[String(parsed === null || parsed === void 0 ? void 0 : parsed.protocol)];
-                if (!httpLib) {
-                    stream.emit('error', new Miniget.MinigetError('Invalid URL object from `transform` function'));
-                    return;
-                }
-            }
-        }
-        const onError = (err) => {
-            if (stream.destroyed || stream.readableEnded) {
-                return;
-            }
-            // Needed for node v10.
-            if (stream._readableState.ended) {
-                return;
-            }
-            cleanup();
-            if (!retryRequest({ err })) {
-                stream.emit('error', err);
-            }
-            else {
-                activeRequest.removeListener('close', onRequestClose);
-            }
-        };
-        const onRequestClose = () => {
-            cleanup();
-            retryRequest({});
-        };
-        const cleanup = () => {
-            activeRequest.removeListener('close', onRequestClose);
-            activeResponse === null || activeResponse === void 0 ? void 0 : activeResponse.removeListener('data', onData);
-            activeDecodedStream === null || activeDecodedStream === void 0 ? void 0 : activeDecodedStream.removeListener('end', onEnd);
-        };
-        const onData = (chunk) => { downloaded += chunk.length; };
-        const onEnd = () => {
-            cleanup();
-            if (!reconnectIfEndedEarly()) {
-                stream.end();
-            }
-        };
-        activeRequest = httpLib.request(parsed, (res) => {
-            // Needed for node v10, v12.
-            // istanbul ignore next
-            if (stream.destroyed) {
-                return;
-            }
-            if (redirectStatusCodes.has(res.statusCode)) {
-                if (redirects++ >= opts.maxRedirects) {
-                    stream.emit('error', new Miniget.MinigetError('Too many redirects'));
-                }
-                else {
-                    if (res.headers.location) {
-                        url = res.headers.location;
-                    }
-                    else {
-                        let err = new Miniget.MinigetError('Redirect status code given with no location', res.statusCode);
-                        stream.emit('error', err);
-                        cleanup();
-                        return;
-                    }
-                    setTimeout(doDownload, parseInt(res.headers['retry-after'] || '0', 10) * 1000);
-                    stream.emit('redirect', url);
-                }
-                cleanup();
-                return;
-                // Check for rate limiting.
-            }
-            else if (retryStatusCodes.has(res.statusCode)) {
-                if (!retryRequest({ retryAfter: parseInt(res.headers['retry-after'] || '0', 10) })) {
-                    let err = new Miniget.MinigetError(`Status code: ${res.statusCode}`, res.statusCode);
-                    stream.emit('error', err);
-                }
-                cleanup();
-                return;
-            }
-            else if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 400)) {
-                let err = new Miniget.MinigetError(`Status code: ${res.statusCode}`, res.statusCode);
-                if (res.statusCode >= 500) {
-                    onError(err);
-                }
-                else {
-                    stream.emit('error', err);
-                }
-                cleanup();
-                return;
-            }
-            activeDecodedStream = res;
-            if (opts.acceptEncoding && res.headers['content-encoding']) {
-                for (let enc of res.headers['content-encoding'].split(', ').reverse()) {
-                    let fn = opts.acceptEncoding[enc];
-                    if (fn) {
-                        activeDecodedStream = activeDecodedStream.pipe(fn());
-                        activeDecodedStream.on('error', onError);
-                    }
-                }
-            }
-            if (!contentLength) {
-                contentLength = parseInt(`${res.headers['content-length']}`, 10);
-                acceptRanges = res.headers['accept-ranges'] === 'bytes' &&
-                    contentLength > 0 && opts.maxReconnects > 0;
-            }
-            res.on('data', onData);
-            activeDecodedStream.on('end', onEnd);
-            activeDecodedStream.pipe(stream, { end: !acceptRanges });
-            activeResponse = res;
-            stream.emit('response', res);
-            res.on('error', onError);
-            forwardEvents(res, responseEvents);
-        });
-        activeRequest.on('error', onError);
-        activeRequest.on('close', onRequestClose);
-        forwardEvents(activeRequest, requestEvents);
-        if (stream.destroyed) {
-            streamDestroy(...destroyArgs);
-        }
-        stream.emit('request', activeRequest);
-        activeRequest.end();
-    };
-    stream.abort = (err) => {
-        console.warn('`MinigetStream#abort()` has been deprecated in favor of `MinigetStream#destroy()`');
-        stream.aborted = true;
-        stream.emit('abort');
-        stream.destroy(err);
-    };
-    let destroyArgs;
-    const streamDestroy = (err) => {
-        activeRequest.destroy(err);
-        activeDecodedStream === null || activeDecodedStream === void 0 ? void 0 : activeDecodedStream.unpipe(stream);
-        activeDecodedStream === null || activeDecodedStream === void 0 ? void 0 : activeDecodedStream.destroy();
-        clearTimeout(retryTimeout);
-    };
-    stream._destroy = (...args) => {
-        stream.destroyed = true;
-        if (activeRequest) {
-            streamDestroy(...args);
-        }
-        else {
-            destroyArgs = args;
-        }
-    };
-    stream.text = () => new Promise((resolve, reject) => {
-        let body = '';
-        stream.setEncoding('utf8');
-        stream.on('data', chunk => body += chunk);
-        stream.on('end', () => resolve(body));
-        stream.on('error', reject);
-    });
-    process.nextTick(doDownload);
-    return stream;
-}
-module.exports = Miniget;
-
-}).call(this)}).call(this,require('_process'))
-},{"_process":20,"http":43,"https":7,"stream":28}],83:[function(require,module,exports){
+},{"../package.json":76,"_process":19,"miniget":17}],76:[function(require,module,exports){
 module.exports={
-  "_from": "ytdl-core@latest",
+  "_from": "ytdl-core@^4.9.1",
   "_id": "ytdl-core@4.9.1",
   "_inBundle": false,
   "_integrity": "sha512-6Jbp5RDhUEozlaJQAR+l8oV8AHsx3WUXxSyPxzE6wOIAaLql7Hjiy0ZM58wZoyj1YEenlEPjEqcJIjKYKxvHtQ==",
   "_location": "/ytdl-core",
-  "_phantomChildren": {
-    "sax": "1.2.4"
-  },
+  "_phantomChildren": {},
   "_requested": {
-    "type": "tag",
+    "type": "range",
     "registry": true,
-    "raw": "ytdl-core@latest",
+    "raw": "ytdl-core@^4.9.1",
     "name": "ytdl-core",
     "escapedName": "ytdl-core",
-    "rawSpec": "latest",
+    "rawSpec": "^4.9.1",
     "saveSpec": null,
-    "fetchSpec": "latest"
+    "fetchSpec": "^4.9.1"
   },
   "_requiredBy": [
-    "#USER",
     "/"
   ],
   "_resolved": "https://registry.npmjs.org/ytdl-core/-/ytdl-core-4.9.1.tgz",
   "_shasum": "f587e2bd8329b5133c0bac4ce5ee1f3c7a1175a9",
-  "_spec": "ytdl-core@latest",
-  "_where": "C:\\Users\\bogac\\Documents\\Projects\\YouTube Download",
+  "_spec": "ytdl-core@^4.9.1",
+  "_where": "C:\\Users\\bogac\\Documents\\Projects\\xBox\\node_modules\\ytdl-core-browser",
   "author": {
     "name": "fent",
     "email": "fentbox@gmail.com",
@@ -15215,4 +14145,4 @@ module.exports = function (options) {
         } }, (options.proxyquireStubs || {})));
 };
 
-},{"m3u8stream":12,"miniget":18,"proxyquireify":21,"ytdl-core":71}]},{},[]);
+},{"m3u8stream":12,"miniget":17,"proxyquireify":20,"ytdl-core":70}]},{},[]);
