@@ -1,17 +1,12 @@
-//hshshdhshdshdhhsdhsd
-//kdsfksdhfkjsdfkjsdh
-//sjdhfkjsdjh
-/*
+const express = require('express');
+const path = require('path');
 
-sşdfldsnfdsf
-ds
-f
-sdf
-gfh
+const app = express();
+const port = process.env.PORT || 8080;
 
-d 
- bfdg
- r
- g
- cdg
-*/
+// sendFile will go here
+app.get('/', function(req, res) {
+  res.sendFile(path.join(__dirname, '/index.html'));
+});
+
+app.listen(port);
