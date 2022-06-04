@@ -12,5 +12,6 @@
   "author": "Hornet",
   "license": "ISC",
   "dependencies": {
+    "express": "^4.18.1"
   }
 }
