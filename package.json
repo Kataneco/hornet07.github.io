@@ -1,0 +1,16 @@
+{
+  "name": "sex",
+  "version": "69.420.666",
+  "engines": {
+    "node": "16.x"
+  },
+  "description": "among us",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "author": "Hornet",
+  "license": "ISC",
+  "dependencies": {
+  }
+}
