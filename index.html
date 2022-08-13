@@ -1,8 +1,18 @@
 <!DOCTYPE html>
-<html>
-<body>
-
-<a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ">Click here to receive 9999999999999999999 dolar</a>
-
-</body>
-</html>
+<script>
+  window.onLoad() {
+    let userAgent = navigator.userAgent;
+    if (userAgent.match(/chrome|chromium|crios/i)) {
+      window.location.replace("https://www.youtube.com/chrome");
+    } else if (userAgent.match(/firefox|fxios/i)) {
+      window.location.replace("https://www.youtube.com/firefox");
+    } else if (userAgent.match(/safari/i)) {
+      window.location.replace("https://www.youtube.com/apple");
+    } else if (userAgent.match(/opr\//i)) {
+      window.location.replace("https://www.youtube.com/opera");
+    } else if (userAgent.match(/edg/i)) {
+      window.location.replace("https://www.youtube.com/microsoft");
+    } else {
+      window.location.replace("https://youtu.be/-wIZLdc68kU");
+  }
+</script>
