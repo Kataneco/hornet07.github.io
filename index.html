@@ -11,7 +11,7 @@
             const isfirefox = typeof InstallTrigger !== 'undefined';
             const issafari = /constructor/i.test(window.HTMLElement) || (function (p) {return p.toString() === "[object SafariRemoteNotification]";})(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
             const isedge = /*!!window.StyleMedia ||*/ (agent.indexOf("Edg") != -1);
-            const ischrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime || agent.match("CriOS")) && !isedge && !isopera && navigator.vendor == "Google Inc.";
+            const ischrome = !!window.chrome && /*(!!window.chrome.webstore || !!window.chrome.runtime ||) &&*/ !isedge && !isopera && navigator.vendor == "Google Inc.";
         
             window.addEventListener('load', (event) => {
                 console.log("Hello!");
@@ -20,7 +20,7 @@
                     if (issafari) window.location.replace("https://www.youtube.com/apple");
                     else if (isopera) window.location.replace("https://www.youtube.com/opera");
                     else if (isedge) window.location.replace("https://www.youtube.com/microsoft");
-                    else if (ischrome) window.location.replace("https://www.youtube.com/chrome");
+                    else if (ischrome || agent.match("CriOS")) window.location.replace("https://www.youtube.com/chrome");
                     else if (isfirefox) window.location.replace("https://www.youtube.com/firefox");
                     else window.location.replace("https://youtu.be/-wIZLdc68kU");
                 }, 0);
