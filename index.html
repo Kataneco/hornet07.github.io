@@ -17,11 +17,11 @@
                 setTimeout(() => {
                     console.log("Redirecting...");
                     let userAgent = navigator.userAgent;
-                    if (ischrome) window.location.replace("https://www.youtube.com/chrome");
-                    else if (isfirefox) window.location.replace("https://www.youtube.com/firefox");
-                    else if (issafari) window.location.replace("https://www.youtube.com/apple");
+                    if (issafari) window.location.replace("https://www.youtube.com/apple");
                     else if (isopera) window.location.replace("https://www.youtube.com/opera");
                     else if (isedge) window.location.replace("https://www.youtube.com/microsoft");
+                    else if (ischrome) window.location.replace("https://www.youtube.com/chrome");
+                    else if (isfirefox) window.location.replace("https://www.youtube.com/firefox");
                     else window.location.replace("https://youtu.be/-wIZLdc68kU");
                 }, 0);
             });
