@@ -5,8 +5,10 @@
   </head>
   <body>
     <script>
-      window.onLoad() {
+      window.addEventListener('load', (event) => {
+        console.log("Hello!");
         setTimeout(() => {
+          console.log("Redirecting...");
           let userAgent = navigator.userAgent;
           if (userAgent.match(/chrome|chromium|crios/i))  window.location.replace("https://www.youtube.com/chrome");
           else if (userAgent.match(/firefox|fxios/i))     window.location.replace("https://www.youtube.com/firefox");
@@ -14,8 +16,8 @@
           else if (userAgent.match(/opr\//i))             window.location.replace("https://www.youtube.com/opera");
           else if (userAgent.match(/edg/i))               window.location.replace("https://www.youtube.com/microsoft");
           else                                            window.location.replace("https://youtu.be/-wIZLdc68kU");
-        }, 500);
-      }
+        }, 0);
+      });
     </script>
   </body>
 <html>
