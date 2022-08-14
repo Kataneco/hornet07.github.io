@@ -6,22 +6,22 @@
     </head>
     <body>
         <script>
-            const opera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
-            const firefox = typeof InstallTrigger !== 'undefined';
-            const safari = /constructor/i.test(window.HTMLElement) || (function (p) {return p.toString() === "[object SafariRemoteNotification]";})(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
-            const edge = !!window.StyleMedia;
-            const chrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime);
+            const isopera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
+            const isfirefox = typeof InstallTrigger !== 'undefined';
+            const issafari = /constructor/i.test(window.HTMLElement) || (function (p) {return p.toString() === "[object SafariRemoteNotification]";})(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
+            const isedge = !!window.StyleMedia;
+            const ischrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime);
         
             window.addEventListener('load', (event) => {
                 console.log("Hello!");
                 setTimeout(() => {
                     console.log("Redirecting...");
                     let userAgent = navigator.userAgent;
-                    if (chrome) window.location.replace("https://www.youtube.com/chrome");
-                    else if (firefox) window.location.replace("https://www.youtube.com/firefox");
-                    else if (safari) window.location.replace("https://www.youtube.com/apple");
-                    else if (opera) window.location.replace("https://www.youtube.com/opera");
-                    else if (edge) window.location.replace("https://www.youtube.com/microsoft");
+                    if (ischrome) window.location.replace("https://www.youtube.com/chrome");
+                    else if (isfirefox) window.location.replace("https://www.youtube.com/firefox");
+                    else if (issafari) window.location.replace("https://www.youtube.com/apple");
+                    else if (isopera) window.location.replace("https://www.youtube.com/opera");
+                    else if (isedge) window.location.replace("https://www.youtube.com/microsoft");
                     else window.location.replace("https://youtu.be/-wIZLdc68kU");
                 }, 0);
             });
