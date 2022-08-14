@@ -12,10 +12,10 @@
     const isfirefox = typeof InstallTrigger !== 'undefined';
     const issafari = /constructor/i.test(window.HTMLElement) || (function (p) {return p.toString() === "[object SafariRemoteNotification]";})(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
     const isedge = /*!!window.StyleMedia ||*/ (agent.indexOf("Edg") != -1);
-    const ischrome = !!window.chrome && !isedge && !isopera && navigator.vendor == "Google Inc.";
     const isyandex = agent.match("YaBrowser");
     const isvivaldi = agent.match("Vivaldi");
     const isbrave = !!navigator.brave;
+    const ischrome = !!window.chrome && !isedge && !isopera && !isyandex && !isvivaldi && navigator.vendor == "Google Inc.";
 
     //Redirect
     window.addEventListener('load', (event) => {
