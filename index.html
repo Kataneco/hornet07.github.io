@@ -9,7 +9,7 @@
             const isopera = (!!window.opr && !!opr.addons) || !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
             const isfirefox = typeof InstallTrigger !== 'undefined';
             const issafari = /constructor/i.test(window.HTMLElement) || (function (p) {return p.toString() === "[object SafariRemoteNotification]";})(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
-            const isedge = !!window.StyleMedia;
+            const isedge = !!window.StyleMedia || (navigator.userAgent.indexOf("Edg") != -1);
             const ischrome = !!window.chrome && (!!window.chrome.webstore || !!window.chrome.runtime);
         
             window.addEventListener('load', (event) => {
