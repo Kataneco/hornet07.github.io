@@ -13,6 +13,9 @@
     const issafari = /constructor/i.test(window.HTMLElement) || (function (p) {return p.toString() === "[object SafariRemoteNotification]";})(!window['safari'] || (typeof safari !== 'undefined' && window['safari'].pushNotification));
     const isedge = /*!!window.StyleMedia ||*/ (agent.indexOf("Edg") != -1);
     const ischrome = !!window.chrome && !isedge && !isopera && navigator.vendor == "Google Inc.";
+    const isyandex = agent.match("YaBrowser");
+    const isvivaldi = agent.match("Vivaldi");
+    const isbrave = !!navigator.brave;
 
     //Redirect
     window.addEventListener('load', (event) => {
@@ -22,9 +25,12 @@
 
         if (isopera) window.location.replace(youtube + "opera");
         else if (isfirefox) window.location.replace(youtube + "firefox");
-        else if (issafari) window.location.replace(youtube + "apple");
-        else if (isedge) window.location.replace(youtube + "microsoft");
+        else if (issafari) window.location.replace(youtube + "channel/UCgD4tyfMT0zXI5YfElFJejw");
+        else if (isedge) window.location.replace(youtube + "channel/UCIGx7oT8p6-jUpOfg98yelA");
         else if (ischrome || agent.match("CriOS")) window.location.replace(youtube + "chrome");
+        else if (isyandex) window.location.replace(youtube + "yandex");
+        else if (isvivaldi) window.location.replace(youtube + "VivaldiBrowser");
+        else if (isbrave) window.location.replace(youtube + "BraveSoftware")
         else window.location.replace(youtube + "watch?v=-wIZLdc68kU");
     });
 </script>
